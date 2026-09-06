@@ -13,6 +13,8 @@ object AppPreferences {
     private const val KEY_DARK_MODE = "dark_mode"
     private const val KEY_REMINDER_ENABLED = "daily_reminder_enabled"
     private const val KEY_REMINDER_MINUTE = "daily_reminder_minute"
+    private const val KEY_REMEMBER_PASSWORD = "remember_password"
+    private const val KEY_LEARNED_SCHEDULE_ENDPOINT = "learned_schedule_endpoint"
 
     const val PAGE_TIMETABLE = "timetable"
     const val PAGE_TODAY = "today"
@@ -148,6 +150,32 @@ object AppPreferences {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putInt(KEY_REMINDER_MINUTE, minuteOfDay.coerceIn(0, 24 * 60 - 1))
+            .apply()
+    }
+
+    /** 是否保存校园账号密码用于会话失效后静默重登，默认开启 */
+    fun isRememberPassword(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_REMEMBER_PASSWORD, true)
+    }
+
+    fun setRememberPassword(context: Context, remember: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_REMEMBER_PASSWORD, remember)
+            .apply()
+    }
+
+    /** 网页导入时自学习到的课表接口完整 URL（适配校内直连 / WebVPN 两种入口） */
+    fun getLearnedScheduleEndpoint(context: Context): String? {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_LEARNED_SCHEDULE_ENDPOINT, null)
+    }
+
+    fun setLearnedScheduleEndpoint(context: Context, url: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_LEARNED_SCHEDULE_ENDPOINT, url)
             .apply()
     }
 

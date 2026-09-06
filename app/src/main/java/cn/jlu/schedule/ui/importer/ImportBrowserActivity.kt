@@ -29,6 +29,7 @@ import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.data.ImportedScheduleStorage
 import cn.jlu.schedule.data.ScheduleRepository
 import cn.jlu.schedule.parser.ScheduleImportCacheParser
+import cn.jlu.schedule.remote.JwEndpoints
 import cn.jlu.schedule.ui.theme.ThemePalette
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 import cn.jlu.schedule.ui.theme.UiFeedback
@@ -301,6 +302,10 @@ class ImportBrowserActivity : AppCompatActivity() {
                     val saved = downloadAndSave(url, method, headers, ua)
                     if (saved != null) {
                         cacheEntries.add(saved)
+                        // 端点自学习：镜像命中的课表接口 URL 同样记录
+                        if (ScheduleImportCacheParser.isLikelyScheduleUrl(url)) {
+                            JwEndpoints.learnScheduleEndpoint(this@ImportBrowserActivity, url)
+                        }
                     }
                 } catch (error: Throwable) {
                     Log.w(TAG, "Mirror cache save failed for $url", error)
@@ -617,6 +622,9 @@ class ImportBrowserActivity : AppCompatActivity() {
             if (!cachedRequestKeys.add(key)) {
                 return
             }
+
+            // 端点自学习：记录课表接口完整 URL，供"一键导入"直接调用
+            JwEndpoints.learnScheduleEndpoint(this@ImportBrowserActivity, safeUrl)
 
             pendingCacheWrites.incrementAndGet()
             updateCaptureStatus()

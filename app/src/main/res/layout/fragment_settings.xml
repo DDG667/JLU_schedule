@@ -82,6 +82,71 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- 校园账号 -->
+        <LinearLayout
+            android:id="@+id/settingsCardAccount"
+            style="@style/SettingsCard">
+
+            <LinearLayout style="@style/SettingsCardHeader">
+                <ImageView
+                    android:id="@+id/iconAccount"
+                    style="@style/SettingsCardIcon"
+                    android:src="@drawable/ic_settings_account"
+                    android:contentDescription="@null" />
+                <TextView
+                    style="@style/SettingsCardTitle"
+                    android:text="@string/settings_account_title" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_account_status_label" />
+                <TextView
+                    android:id="@+id/accountStatusText"
+                    style="@style/SettingsRowValue" />
+                <ImageView style="@style/SettingsRowChevron" android:contentDescription="@null" />
+            </LinearLayout>
+
+            <View style="@style/SettingsDivider" />
+
+            <LinearLayout
+                android:id="@+id/rowAccountLogin"
+                style="@style/SettingsRow">
+                <TextView
+                    android:id="@+id/accountLoginLabel"
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_account_login" />
+                <ImageView style="@style/SettingsRowChevron" android:contentDescription="@null" />
+            </LinearLayout>
+
+            <View style="@style/SettingsDivider" />
+
+            <LinearLayout
+                android:id="@+id/rowAccountLogout"
+                style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_account_logout" />
+                <ImageView style="@style/SettingsRowChevron" android:contentDescription="@null" />
+            </LinearLayout>
+
+            <View style="@style/SettingsDivider" />
+
+            <LinearLayout style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_account_remember" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/accountRememberSwitch"
+                    style="@style/SettingsRowSwitch" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/SettingsCardHint"
+                android:text="@string/settings_account_hint" />
+        </LinearLayout>
+
         <!-- 外观 -->
         <LinearLayout
             android:id="@+id/settingsCardAppearance"

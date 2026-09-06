@@ -27,12 +27,16 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.widget.ViewPager2
 import cn.jlu.schedule.R
+import cn.jlu.schedule.auth.JluCredentialStore
 import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.data.ImportedScheduleStorage
 import cn.jlu.schedule.data.ScheduleRepository
 import cn.jlu.schedule.domain.SectionTimes
 import cn.jlu.schedule.model.WeekParity
 import cn.jlu.schedule.model.Weekday
+import cn.jlu.schedule.remote.AutoImportCoordinator
+import cn.jlu.schedule.remote.JwApiClient
+import cn.jlu.schedule.ui.auth.LoginActivity
 import cn.jlu.schedule.ui.importer.ImportBrowserActivity
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 import cn.jlu.schedule.ui.theme.UiFeedback
@@ -63,6 +67,18 @@ class TimetableFragment : Fragment() {
     private val importLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
         // 数据变化由 ScheduleRepository 状态流驱动
     }
+
+    private val quickImportLoginLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK && isAdded) {
+                UiFeedback.showMessage(
+                    view,
+                    "登录成功，开始一键导入",
+                    ThemePaletteProvider.fromContext(requireContext())
+                )
+                startQuickImport()
+            }
+        }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -191,13 +207,19 @@ class TimetableFragment : Fragment() {
             orientation = LinearLayout.VERTICAL
             setPadding(34, 30, 34, 20)
         }
+        val quickImport = Button(ctx).apply { text = getString(R.string.import_quick) }
         val inCampus = Button(ctx).apply { text = "我在校内" }
         val offCampus = Button(ctx).apply { text = "我在校外" }
         val cancel = Button(ctx).apply { text = "取消" }
+        UiFeedback.stylePrimaryButton(quickImport, palette)
         UiFeedback.styleSecondaryButton(inCampus, palette)
         UiFeedback.styleSecondaryButton(offCampus, palette)
         UiFeedback.styleSecondaryButton(cancel, palette)
-        panel.addView(inCampus)
+        panel.addView(quickImport)
+        panel.addView(inCampus, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = 10 })
         panel.addView(offCampus, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
@@ -214,6 +236,10 @@ class TimetableFragment : Fragment() {
         dialog.show()
         UiFeedback.styleDialogSurface(dialog, palette)
 
+        quickImport.setOnClickListener {
+            dialog.dismiss()
+            startQuickImport()
+        }
         inCampus.setOnClickListener {
             dialog.dismiss()
             launchImportForAsset("target.url")
@@ -225,6 +251,130 @@ class TimetableFragment : Fragment() {
         cancel.setOnClickListener {
             dialog.dismiss()
         }
+    }
+
+    /** 一键导入：未登录先引导登录；已登录则选导入方式后全自动拉取入库 */
+    private fun startQuickImport() {
+        val ctx = requireContext()
+        if (!JwApiClient.hasSession(ctx) && !JluCredentialStore.hasSaved(ctx)) {
+            UiFeedback.showMessage(view, getString(R.string.import_quick_need_login), ThemePaletteProvider.fromContext(ctx))
+            quickImportLoginLauncher.launch(Intent(ctx, LoginActivity::class.java))
+            return
+        }
+        val palette = ThemePaletteProvider.fromContext(ctx)
+        val panel = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(34, 30, 34, 20)
+        }
+        val overwrite = Button(ctx).apply { text = "覆盖当前课表" }
+        val createNew = Button(ctx).apply { text = "新建课表导入" }
+        val cancel = Button(ctx).apply { text = "取消" }
+        UiFeedback.stylePrimaryButton(overwrite, palette)
+        UiFeedback.styleSecondaryButton(createNew, palette)
+        UiFeedback.styleSecondaryButton(cancel, palette)
+        panel.addView(overwrite)
+        panel.addView(createNew, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = 10 })
+        panel.addView(cancel, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = 10 })
+        val modeDialog = AlertDialog.Builder(ctx)
+            .setTitle(getString(R.string.import_quick))
+            .setView(panel)
+            .create()
+        modeDialog.show()
+        UiFeedback.styleDialogSurface(modeDialog, palette)
+
+        overwrite.setOnClickListener {
+            modeDialog.dismiss()
+            runQuickImport(ImportedScheduleStorage.ImportMode.OVERWRITE_ACTIVE, null)
+        }
+        createNew.setOnClickListener {
+            modeDialog.dismiss()
+            promptQuickImportName()
+        }
+        cancel.setOnClickListener { modeDialog.dismiss() }
+    }
+
+    private fun promptQuickImportName() {
+        val ctx = requireContext()
+        val input = EditText(ctx).apply {
+            setSingleLine(true)
+            hint = "新课表名称"
+        }
+        val panel = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(34, 24, 34, 0)
+            addView(input)
+        }
+        val dialog = AlertDialog.Builder(ctx)
+            .setTitle("新建课表导入")
+            .setView(panel)
+            .setPositiveButton("确定", null)
+            .setNegativeButton("取消", null)
+            .create()
+        dialog.show()
+        UiFeedback.styleDialogSurface(dialog, ThemePaletteProvider.fromContext(ctx))
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val name = input.text?.toString()?.trim().orEmpty()
+            if (name.isEmpty()) {
+                input.error = "课表名不能为空"
+                return@setOnClickListener
+            }
+            dialog.dismiss()
+            runQuickImport(ImportedScheduleStorage.ImportMode.CREATE_NEW, name)
+        }
+    }
+
+    private fun runQuickImport(mode: ImportedScheduleStorage.ImportMode, newName: String?) {
+        val ctx = requireContext()
+        val palette = ThemePaletteProvider.fromContext(ctx)
+        val dialog = AlertDialog.Builder(ctx)
+            .setTitle(getString(R.string.import_quick))
+            .setMessage(getString(R.string.import_quick_progress_fetch))
+            .setPositiveButton("知道了", null)
+            .create()
+        dialog.show()
+        UiFeedback.styleDialogSurface(dialog, palette)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = false
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            AutoImportCoordinator.run(ctx, mode, newName) { phase ->
+                // 协程运行在主线程，直接更新进度对话框
+                if (!isAdded || !dialog.isShowing) return@run
+                when (phase) {
+                    is AutoImportCoordinator.Phase.Fetching ->
+                        dialog.setMessage(getString(R.string.import_quick_progress_fetch))
+                    is AutoImportCoordinator.Phase.ReLogin ->
+                        dialog.setMessage(getString(R.string.import_quick_progress_relogin))
+                    is AutoImportCoordinator.Phase.Checking ->
+                        dialog.setMessage(getString(R.string.import_quick_progress_import))
+                    is AutoImportCoordinator.Phase.Done -> {
+                        dialog.setMessage(
+                            "导入成功：${phase.courseCount} 门课程" +
+                                (phase.newProfileName?.let { "（新课表 $it）" } ?: "")
+                        )
+                        finishProgress(dialog)
+                    }
+                    is AutoImportCoordinator.Phase.NeedWebImport -> {
+                        dialog.setMessage(phase.reason)
+                        finishProgress(dialog)
+                    }
+                    is AutoImportCoordinator.Phase.Failed -> {
+                        dialog.setMessage("导入失败：${phase.message}")
+                        finishProgress(dialog)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun finishProgress(dialog: AlertDialog) {
+        dialog.setCancelable(true)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = true
     }
 
     private fun launchImportForAsset(assetFile: String) {

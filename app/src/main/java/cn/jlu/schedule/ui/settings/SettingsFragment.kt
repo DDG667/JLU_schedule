@@ -54,6 +54,14 @@ class SettingsFragment : Fragment() {
             // 数据变化由 ScheduleRepository 状态流驱动，无需额外刷新
         }
 
+    private val accountLoginLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                view?.let { refreshAccountCard(it) }
+                UiFeedback.showMessage(view, "校园账号登录成功", paletteForFeedback())
+            }
+        }
+
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
             pendingSourceUri = uri
@@ -115,6 +123,7 @@ class SettingsFragment : Fragment() {
         // 卡片与分隔线按主题色板着色
         listOf(
             view.findViewById<LinearLayout>(R.id.settingsCardTimetable),
+            view.findViewById<LinearLayout>(R.id.settingsCardAccount),
             view.findViewById<LinearLayout>(R.id.settingsCardAppearance),
             view.findViewById<LinearLayout>(R.id.settingsCardReminder),
             view.findViewById<LinearLayout>(R.id.settingsCardBackground),
@@ -132,6 +141,7 @@ class SettingsFragment : Fragment() {
         }
         listOf(
             view.findViewById<View>(R.id.iconTimetable),
+            view.findViewById<View>(R.id.iconAccount),
             view.findViewById<View>(R.id.iconAppearance),
             view.findViewById<View>(R.id.iconReminder),
             view.findViewById<View>(R.id.iconBackground),
@@ -157,6 +167,27 @@ class SettingsFragment : Fragment() {
         view.findViewById<View>(R.id.rowManageTimetable).setOnClickListener {
             manageProfilesLauncher.launch(Intent(requireContext(), TimetableManageActivity::class.java))
         }
+
+        // 校园账号卡片
+        val accountRememberSwitch = view.findViewById<SwitchCompat>(R.id.accountRememberSwitch)
+        accountRememberSwitch.isChecked = AppPreferences.isRememberPassword(requireContext())
+        accountRememberSwitch.setOnCheckedChangeListener { _, checked ->
+            AppPreferences.setRememberPassword(requireContext(), checked)
+            if (!checked) {
+                cn.jlu.schedule.auth.JluCredentialStore.clear(requireContext())
+            }
+            refreshAccountCard(view)
+        }
+        view.findViewById<View>(R.id.rowAccountLogin).setOnClickListener {
+            accountLoginLauncher.launch(Intent(requireContext(), cn.jlu.schedule.ui.auth.LoginActivity::class.java))
+        }
+        view.findViewById<View>(R.id.rowAccountLogout).setOnClickListener {
+            cn.jlu.schedule.remote.JwApiClient.clearSession(requireContext())
+            cn.jlu.schedule.auth.JluCredentialStore.clear(requireContext())
+            refreshAccountCard(view)
+            UiFeedback.showMessage(view, "已退出登录", paletteForFeedback())
+        }
+        refreshAccountCard(view)
         view.findViewById<View>(R.id.rowSemesterStart).setOnClickListener {
             showSemesterDatePicker(semesterStartDateText)
         }
@@ -305,6 +336,21 @@ class SettingsFragment : Fragment() {
             }
         }
     }
+
+    private fun refreshAccountCard(view: View) {
+        val context = view.context
+        val studentId = cn.jlu.schedule.auth.JluCredentialStore.studentId(context)
+        val hasSession = cn.jlu.schedule.remote.JwApiClient.hasSession(context)
+        view.findViewById<TextView>(R.id.accountStatusText).text = when {
+            hasSession -> if (studentId != null) "已登录 · $studentId" else "已登录"
+            studentId != null -> "已记住账号 · 待登录"
+            else -> getString(R.string.settings_account_status_out)
+        }
+        view.findViewById<TextView>(R.id.accountLoginLabel).text =
+            getString(if (studentId == null && !hasSession) R.string.settings_account_login else R.string.settings_account_relogin)
+    }
+
+    private fun paletteForFeedback(): ThemePalette = ThemePaletteProvider.fromContext(requireContext())
 
     private fun bindSegment(
         container: LinearLayout,
