@@ -27,17 +27,16 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.widget.ViewPager2
 import cn.jlu.schedule.R
-import cn.jlu.schedule.auth.JluCredentialStore
 import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.data.ImportedScheduleStorage
 import cn.jlu.schedule.data.ScheduleRepository
 import cn.jlu.schedule.domain.SectionTimes
 import cn.jlu.schedule.model.WeekParity
 import cn.jlu.schedule.model.Weekday
-import cn.jlu.schedule.remote.AutoImportCoordinator
 import cn.jlu.schedule.remote.JwApiClient
 import cn.jlu.schedule.ui.auth.LoginActivity
 import cn.jlu.schedule.ui.importer.ImportBrowserActivity
+import cn.jlu.schedule.ui.importer.QuickImportActivity
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 import cn.jlu.schedule.ui.theme.UiFeedback
 import kotlinx.coroutines.launch
@@ -253,10 +252,14 @@ class TimetableFragment : Fragment() {
         }
     }
 
-    /** 一键导入：未登录先引导登录；已登录则选导入方式后全自动拉取入库 */
+    /** 一键导入：复用内置浏览器登录 Cookie，隐藏 WebView 自动获取课表并入库 */
     private fun startQuickImport() {
         val ctx = requireContext()
-        if (!JwApiClient.hasSession(ctx) && !JluCredentialStore.hasSaved(ctx)) {
+        val webViewSession = runCatching {
+            android.webkit.CookieManager.getInstance()
+                .getCookie(cn.jlu.schedule.auth.TpassConfig.IEDU_PORTAL_URL)
+        }.getOrNull()?.isNotBlank() == true
+        if (!webViewSession && !JwApiClient.hasSession(ctx)) {
             UiFeedback.showMessage(view, getString(R.string.import_quick_need_login), ThemePaletteProvider.fromContext(ctx))
             quickImportLoginLauncher.launch(Intent(ctx, LoginActivity::class.java))
             return
@@ -290,13 +293,25 @@ class TimetableFragment : Fragment() {
 
         overwrite.setOnClickListener {
             modeDialog.dismiss()
-            runQuickImport(ImportedScheduleStorage.ImportMode.OVERWRITE_ACTIVE, null)
+            launchQuickImport(createNew = false, newName = null)
         }
         createNew.setOnClickListener {
             modeDialog.dismiss()
             promptQuickImportName()
         }
         cancel.setOnClickListener { modeDialog.dismiss() }
+    }
+
+    private val quickImportLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
+            // 数据刷新由 ScheduleRepository 状态流驱动
+        }
+
+    private fun launchQuickImport(createNew: Boolean, newName: String?) {
+        val intent = Intent(requireContext(), QuickImportActivity::class.java)
+            .putExtra(QuickImportActivity.EXTRA_CREATE_NEW, createNew)
+            .putExtra(QuickImportActivity.EXTRA_NEW_NAME, newName)
+        quickImportLauncher.launch(intent)
     }
 
     private fun promptQuickImportName() {
@@ -325,56 +340,8 @@ class TimetableFragment : Fragment() {
                 return@setOnClickListener
             }
             dialog.dismiss()
-            runQuickImport(ImportedScheduleStorage.ImportMode.CREATE_NEW, name)
+            launchQuickImport(createNew = true, newName = name)
         }
-    }
-
-    private fun runQuickImport(mode: ImportedScheduleStorage.ImportMode, newName: String?) {
-        val ctx = requireContext()
-        val palette = ThemePaletteProvider.fromContext(ctx)
-        val dialog = AlertDialog.Builder(ctx)
-            .setTitle(getString(R.string.import_quick))
-            .setMessage(getString(R.string.import_quick_progress_fetch))
-            .setPositiveButton("知道了", null)
-            .create()
-        dialog.show()
-        UiFeedback.styleDialogSurface(dialog, palette)
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = false
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            AutoImportCoordinator.run(ctx, mode, newName) { phase ->
-                // 协程运行在主线程，直接更新进度对话框
-                if (!isAdded || !dialog.isShowing) return@run
-                when (phase) {
-                    is AutoImportCoordinator.Phase.Fetching ->
-                        dialog.setMessage(getString(R.string.import_quick_progress_fetch))
-                    is AutoImportCoordinator.Phase.ReLogin ->
-                        dialog.setMessage(getString(R.string.import_quick_progress_relogin))
-                    is AutoImportCoordinator.Phase.Checking ->
-                        dialog.setMessage(getString(R.string.import_quick_progress_import))
-                    is AutoImportCoordinator.Phase.Done -> {
-                        dialog.setMessage(
-                            "导入成功：${phase.courseCount} 门课程" +
-                                (phase.newProfileName?.let { "（新课表 $it）" } ?: "")
-                        )
-                        finishProgress(dialog)
-                    }
-                    is AutoImportCoordinator.Phase.NeedWebImport -> {
-                        dialog.setMessage(phase.reason)
-                        finishProgress(dialog)
-                    }
-                    is AutoImportCoordinator.Phase.Failed -> {
-                        dialog.setMessage("导入失败：${phase.message}")
-                        finishProgress(dialog)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun finishProgress(dialog: AlertDialog) {
-        dialog.setCancelable(true)
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = true
     }
 
     private fun launchImportForAsset(assetFile: String) {

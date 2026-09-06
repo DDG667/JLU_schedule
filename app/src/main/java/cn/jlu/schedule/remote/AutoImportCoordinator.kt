@@ -1,96 +1,49 @@
 package cn.jlu.schedule.remote
 
 import android.content.Context
-import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.data.ImportedScheduleStorage
 import cn.jlu.schedule.data.ScheduleRepository
-import cn.jlu.schedule.parser.DoScheduleParser
-import cn.jlu.schedule.auth.CasLoginResult
+import cn.jlu.schedule.parser.ScheduleImportCacheParser
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
- * 一键导入编排：解析端点 → 拉取课表 JSON（会话失效时静默重登一次）→ 复用解析器 → 入库。
- * 全程无需打开浏览器；只有端点未学习或静默登录不可行时才引导用户走网页导入。
+ * 一键导入编排：解析已捕获的课表响应 → 复用与网页导入一致的学期筛选逻辑 → 入库。
+ * 捕获环节由 QuickImportActivity 的隐藏 WebView 完成（复用内置浏览器登录 Cookie）。
  */
 object AutoImportCoordinator {
 
-    /** 流程阶段，UI 可据此更新进度文案 */
+    /** 结果阶段 */
     sealed class Phase {
-        data object Checking : Phase()
-        data object ReLogin : Phase()
-        data object Fetching : Phase()
         data class Done(val courseCount: Int, val newProfileName: String?) : Phase()
-        data class NeedWebImport(val reason: String) : Phase()
         data class Failed(val message: String) : Phase()
     }
 
-    suspend fun run(
+    /** 解析捕获的接口响应并入库；entries 为捕获到的一个或多个课表 JSON 落盘 */
+    suspend fun importCaptured(
         context: Context,
+        entries: List<ScheduleImportCacheParser.CacheEntry>,
         mode: ImportedScheduleStorage.ImportMode,
-        newProfileName: String?,
-        onPhase: (Phase) -> Unit = {}
-    ) {
-        val endpoint = JwEndpoints.resolveScheduleEndpoint(context)
-        if (endpoint == null) {
-            onPhase(
-                Phase.NeedWebImport(
-                    "还没有学习到课表接口地址，请先使用一次\"网页导入\"，之后即可一键导入"
-                )
-            )
-            return
+        newProfileName: String?
+    ): Phase = withContext(Dispatchers.IO) {
+        if (entries.isEmpty()) return@withContext Phase.Failed("未捕获到课表数据")
+        val parseResult = try {
+            ScheduleImportCacheParser.parse(entries)
+        } catch (error: Exception) {
+            return@withContext Phase.Failed(error.message ?: "解析课表失败")
         }
-
-        onPhase(Phase.Fetching)
-        var fetch = ScheduleRemoteSource.fetch(context, endpoint)
-        if (fetch.isFailure && fetch.exceptionOrNull() is ScheduleRemoteSource.FetchError.SessionExpired) {
-            if (!AppPreferences.isRememberPassword(context)) {
-                onPhase(Phase.NeedWebImport("登录已过期，且未开启\"记住密码\"，请重新登录网页版"))
-                return
-            }
-            onPhase(Phase.ReLogin)
-            when (JwApiClient.silentLogin(context)) {
-                is CasLoginResult.Success -> {
-                    onPhase(Phase.Fetching)
-                    fetch = ScheduleRemoteSource.fetch(context, endpoint)
-                }
-                is CasLoginResult.InvalidCredentials ->
-                    onPhase(Phase.NeedWebImport("自动登录失败：账号或密码已修改，请重新登录"))
-                CasLoginResult.NeedsManualLogin ->
-                    onPhase(Phase.NeedWebImport("本次登录需要验证码，请重新登录网页版"))
-                is CasLoginResult.Error ->
-                    onPhase(Phase.NeedWebImport("自动登录失败：无法连接统一认证，请检查网络"))
-            }
+        if (parseResult.courses.isEmpty()) {
+            return@withContext Phase.Failed("教务返回了空课表")
         }
-
-        val payload = fetch.getOrElse { error ->
-            onPhase(Phase.Failed(describe(error)))
-            return
-        }
-
-        val courses = DoScheduleParser.parse(payload.json)
-            .filter { it.courseName.isNotBlank() && it.meetings.isNotEmpty() }
-        if (courses.isEmpty()) {
-            onPhase(Phase.Failed("教务返回了空课表"))
-            return
-        }
-
-        onPhase(Phase.Checking)
-        val import = ScheduleRepository.importParsedCourses(
+        ScheduleRepository.importParsedCourses(
             context,
-            courses,
+            parseResult.courses,
             mode,
             newProfileName,
-            JwEndpoints.inferSemesterStart(courses)
+            parseResult.inferredSemesterStartDate
+        ).fold(
+            onSuccess = { Phase.Done(it.courseCount, newProfileName) },
+            onFailure = { Phase.Failed(it.message ?: "导入失败") }
         )
-        import.fold(
-            onSuccess = { result -> onPhase(Phase.Done(result.courseCount, newProfileName)) },
-            onFailure = { error -> onPhase(Phase.Failed(describe(error))) }
-        )
-    }
-
-    private fun describe(error: Throwable): String = when (error) {
-        is ScheduleRemoteSource.FetchError.SessionExpired -> "登录已过期"
-        is ScheduleRemoteSource.FetchError.NotSchedulePayload -> error.message ?: "接口响应异常"
-        is ScheduleRemoteSource.FetchError.Network -> error.message ?: "网络异常"
-        else -> error.message ?: "未知错误"
     }
 }
