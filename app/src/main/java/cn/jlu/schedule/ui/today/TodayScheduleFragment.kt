@@ -182,7 +182,7 @@ class TodayScheduleFragment : Fragment() {
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = 2f
-                    setColor(CourseCardColors.forCourse(item.courseIndex))
+                    setColor(CourseCardColors.forCourse(item.courseIndex, palette.isDark))
                 }
             }
 

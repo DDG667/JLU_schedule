@@ -20,7 +20,6 @@ import java.util.Locale
 class WeekTimetableRenderer(
     private val periodRanges: List<String>,
     private val weekdayLabels: Map<Weekday, String>,
-    private val cardColors: IntArray,
     private val fontScale: Float,
     private val palette: ThemePalette,
     private val hasCustomBackground: Boolean
@@ -223,7 +222,7 @@ class WeekTimetableRenderer(
                 orientation = LinearLayout.VERTICAL
                 setPadding(m.cardPadding, m.cardPadding, m.cardPadding, m.cardPadding)
                 alpha = if (item.isCurrentWeek) 1f else 0.55f
-                background = roundedBackground(cardColors[item.courseIndex % cardColors.size])
+                background = roundedBackground(CourseCardColors.forCourse(item.courseIndex, palette.isDark))
                 elevation = if (isCurrentCourse) 10f else 6f
                 setOnClickListener { onCourseClick(item.toCourseMeetingRef()) }
 
@@ -233,7 +232,7 @@ class WeekTimetableRenderer(
                     addView(TextView(context).apply {
                         text = "[非本周] 第${item.nextActiveWeek}周"
                         textSize = 8f * fontScale
-                        setTextColor(CARD_TEXT_COLOR)
+                        setTextColor(CourseCardColors.textColorFor(item.courseIndex, palette.isDark))
                         maxLines = 1
                     })
                 }
@@ -243,7 +242,7 @@ class WeekTimetableRenderer(
                 addView(TextView(context).apply {
                     text = item.course.courseName
                     textSize = fittedSize(item.course.courseName, 12f, 9.8f) * fontScale
-                    setTextColor(CARD_TEXT_COLOR)
+                    setTextColor(CourseCardColors.textColorFor(item.courseIndex, palette.isDark))
                     setTypeface(typeface, Typeface.BOLD)
                     maxLines = if (spanCount >= 2) 3 else 2
                     ellipsize = android.text.TextUtils.TruncateAt.END
@@ -253,7 +252,7 @@ class WeekTimetableRenderer(
                 addView(TextView(context).apply {
                     text = item.meeting.location.ifBlank { "教室待定" }
                     textSize = fittedSize(item.meeting.location, 9.5f, 8.2f) * fontScale
-                    setTextColor(CARD_TEXT_COLOR)
+                    setTextColor(CourseCardColors.textColorFor(item.courseIndex, palette.isDark))
                     maxLines = (spanCount * 2).coerceIn(2, 6)
                     ellipsize = android.text.TextUtils.TruncateAt.END
                     includeFontPadding = false
@@ -311,8 +310,6 @@ class WeekTimetableRenderer(
     }
 
     companion object {
-        private const val CARD_TEXT_COLOR = 0xFF37312A.toInt()
-
         fun resolveCurrentSection(periodRanges: List<String>, now: LocalTime = LocalTime.now()): Int? {
             periodRanges.forEachIndexed { index, range ->
                 val start = runCatching { LocalTime.parse(range.substringBefore('-')) }.getOrNull() ?: return@forEachIndexed

@@ -23,7 +23,8 @@ data class ThemePalette(
     val detailCard: Int,
     val detailTitle: Int,
     val detailBody: Int,
-    val detailMeta: Int
+    val detailMeta: Int,
+    val isDark: Boolean
 )
 
 object ThemePaletteProvider {
@@ -43,6 +44,8 @@ object ThemePaletteProvider {
             )
             return context.getColor(if (id != 0) id else R.color.warm_page_background)
         }
+        val isDark = (context.resources.configuration.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
         return ThemePalette(
             pageBackground = color("page_background"),
             navBackground = color("nav_background"),
@@ -61,7 +64,8 @@ object ThemePaletteProvider {
             detailCard = color("detail_card"),
             detailTitle = color("detail_title"),
             detailBody = color("detail_body"),
-            detailMeta = color("detail_meta")
+            detailMeta = color("detail_meta"),
+            isDark = isDark
         )
     }
 

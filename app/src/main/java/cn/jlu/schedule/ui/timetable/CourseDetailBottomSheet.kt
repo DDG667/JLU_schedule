@@ -82,15 +82,15 @@ object CourseDetailBottomSheet {
         banner.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = 14f
-            setColor(CourseCardColors.forCourse(item.courseIndex))
+            setColor(CourseCardColors.forCourse(item.courseIndex, palette.isDark))
         }
         val bannerSection = view.findViewById<TextView>(R.id.detailBannerSection)
         bannerSection.text = "${weekdayLabels[meeting.weekday]} · 第${meeting.startSection}-${meeting.endSection}节"
-        bannerSection.setTextColor(Color.WHITE)
+        bannerSection.setTextColor(CourseCardColors.textColorFor(item.courseIndex, palette.isDark))
         val bannerTime = view.findViewById<TextView>(R.id.detailBannerTime)
         val timeText = "${sectionStart(periodRanges, meeting.startSection)} - ${sectionEnd(periodRanges, meeting.endSection)}"
         bannerTime.text = timeText
-        bannerTime.setTextColor(ColorUtils.setAlphaComponent(Color.WHITE, 215))
+        bannerTime.setTextColor(CourseCardColors.textColorFor(item.courseIndex, palette.isDark))
 
         // 信息行
         val teacher = view.findViewById<TextView>(R.id.detailTeacher)

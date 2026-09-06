@@ -18,7 +18,6 @@ class WeekPagerAdapter(
     private val totalWeeks: Int,
     private val periodRanges: List<String>,
     private val weekdayLabels: Map<Weekday, String>,
-    private val cardColors: IntArray,
     private val today: LocalDate,
     private val currentSection: Int?,
     private val semesterStart: LocalDate,
@@ -47,7 +46,7 @@ class WeekPagerAdapter(
         private val headerRow: LinearLayout = itemView.findViewById(R.id.headerRow)
         private val bodyRow: LinearLayout = itemView.findViewById(R.id.bodyRow)
 
-        private val renderer = WeekTimetableRenderer(periodRanges, weekdayLabels, cardColors, fontScale, palette, hasCustomBackground)
+        private val renderer = WeekTimetableRenderer(periodRanges, weekdayLabels, fontScale, palette, hasCustomBackground)
 
         fun bind(week: Int, weekStart: LocalDate) {
             val metrics = TimetableMetrics.create(itemView.context)

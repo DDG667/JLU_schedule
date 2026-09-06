@@ -52,17 +52,6 @@ class TimetableFragment : Fragment() {
         Weekday.SUNDAY to "日"
     )
 
-    private val cardColors = intArrayOf(
-        0xFFFAD8C0.toInt(),
-        0xFFC9E7FF.toInt(),
-        0xFFD8F4D2.toInt(),
-        0xFFFFE6A8.toInt(),
-        0xFFE6D7FF.toInt(),
-        0xFFFFD7E0.toInt(),
-        0xFFD8F0EE.toInt(),
-        0xFFFFE1C4.toInt()
-    )
-
     private lateinit var weekText: TextView
     private lateinit var dateText: TextView
     private lateinit var weekPager: ViewPager2
@@ -159,7 +148,6 @@ class TimetableFragment : Fragment() {
             totalWeeks = data.totalWeeks,
             periodRanges = SectionTimes.DEFAULT_RANGES,
             weekdayLabels = weekdayLabels,
-            cardColors = cardColors,
             today = today,
             currentSection = currentSection,
             semesterStart = data.semesterStart,
@@ -279,16 +267,19 @@ class TimetableFragment : Fragment() {
                 setColor(dialogPalette.panelAltBackground)
                 setStroke(2, ColorUtils.blendARGB(dialogPalette.panelAltBackground, dialogPalette.iconTint, 0.22f))
             }
-        val inputBackground = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = 10f
-            setColor(dialogPalette.panelBackground)
-            setStroke(2, ColorUtils.blendARGB(dialogPalette.panelBackground, dialogPalette.iconTint, 0.18f))
-        }
+        // 每个输入框必须持有独立的 GradientDrawable 实例：共享实例会在首帧后被
+        // 最后一个不同尺寸的视图改写 bounds，聚焦重绘时边框按过期尺寸渲染（框变短）
         listOf(
             nameInput, teacherInput, locationInput,
             startSectionInput, endSectionInput, startWeekInput, endWeekInput, weekdaySpinner
-        ).forEach { it.background = inputBackground }
+        ).forEach { input ->
+            input.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 10f
+                setColor(dialogPalette.panelBackground)
+                setStroke(2, ColorUtils.blendARGB(dialogPalette.panelBackground, dialogPalette.iconTint, 0.18f))
+            }
+        }
 
         val weekdayItems = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
         weekdaySpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_dropdown_item, weekdayItems)
