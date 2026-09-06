@@ -371,7 +371,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:text="JLU Schedule 2.0.0-alpha"
+            android:text="JLU Schedule 2.1.0"
             android:textColor="?android:attr/textColorSecondary"
             android:textSize="12sp"
             android:layout_marginTop="8dp" />
