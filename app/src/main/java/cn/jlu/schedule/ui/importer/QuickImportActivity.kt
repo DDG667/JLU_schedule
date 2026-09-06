@@ -59,10 +59,12 @@ class QuickImportActivity : AppCompatActivity() {
     private val capturedFiles = java.util.Collections.synchronizedList(ArrayList<Pair<String, File>>())
     private val sessionDir by lazy { File(filesDir, "import_web_cache/quick_${System.currentTimeMillis()}") }
     private val handled = AtomicBoolean(false)
+    private val importStarted = AtomicBoolean(false)
     private var silentLoginTried = false
     private var fallbackPageLoaded = false
     private var fallbackFetchDone = false
     private var indexCounter = 0
+    private var importJob: kotlinx.coroutines.Job? = null
 
     private val mode by lazy {
         if (intent.getBooleanExtra(EXTRA_CREATE_NEW, false)) {
@@ -309,7 +311,7 @@ class QuickImportActivity : AppCompatActivity() {
         }
     }
 
-    /** 抓到课表 JSON：落盘去重，稍作等待收齐同页多个学期响应后统一解析 */
+    /** 抓到课表 JSON：落盘去重，滚动静默期后统一解析入库 */
     private fun onPayloadCaptured(url: String, text: String) {
         val key = sha1("$url|${text.take(256)}")
         synchronized(capturedKeys) {
@@ -324,15 +326,19 @@ class QuickImportActivity : AppCompatActivity() {
         }
         Log.i(TAG, "captured schedule payload #${indexCounter} (${text.length} bytes)")
         showMessage(getString(R.string.import_quick_progress_import))
-        lifecycleScope.launch {
-            // 等待同页可能的其它学期响应，2 秒静默期后统一解析
-            delay(2000)
+        // 滚动静默期：页面可能分多次查询不同视图（周视图/整学期），每收到新捕获就重置
+        // 计时，静默满后统一交给解析器合并同学期批次，避免只拿到部分数据导致缺课
+        importJob?.cancel()
+        importJob = lifecycleScope.launch {
+            delay(CAPTURE_QUIET_MS)
             if (handled.get()) return@launch
             importAll()
         }
     }
 
     private suspend fun importAll() {
+        // 防止静默期任务与超时看门狗并发执行同一导入
+        if (!importStarted.compareAndSet(false, true)) return
         val entries = synchronized(capturedFiles) {
             capturedFiles.mapIndexed { index, (url, file) ->
                 ScheduleImportCacheParser.CacheEntry(
@@ -374,7 +380,11 @@ class QuickImportActivity : AppCompatActivity() {
     private fun scheduleTimeoutWatchdog() {
         lifecycleScope.launch {
             delay(TIMEOUT_MS)
-            if (!handled.get() && capturedFiles.isEmpty()) {
+            if (handled.get()) return@launch
+            if (capturedFiles.isNotEmpty()) {
+                // 已有捕获但静默期未结束（页面持续查询）：直接收口导入
+                importAll()
+            } else {
                 handled.set(true)
                 progress.visibility = View.GONE
                 showMessage("获取课表超时，请确认已登录且网络可用后重试")
@@ -414,6 +424,9 @@ class QuickImportActivity : AppCompatActivity() {
         private const val TAG = "QuickImport"
         private const val MIN_PAYLOAD_BYTES = 80
         private const val TIMEOUT_MS = 30_000L
+
+        /** 最后一次捕获后的静默等待，页面查完不同视图（周/学期）再统一解析 */
+        private const val CAPTURE_QUIET_MS = 5_000L
         private const val REQ_LOGIN = 4001
 
         /** 我的课表应用页（金智 eMAP 标准路由），页面自身会请求课表接口 */
