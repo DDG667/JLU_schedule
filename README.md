@@ -1,15 +1,16 @@
 # JLU_schedule
 
-吉林大学课表应用，开源、无广告。
+吉林大学课表应用，开源、无广告。支持 Android / iOS / 鸿蒙三端（采用"双原生轻量移植"架构，Android 为主版本，详见 [docs/PORTING.md](docs/PORTING.md)）。
 
 ## 项目简介
 
-JLU_schedule 是一个面向吉大学生的 Android 课表工具，支持通过教务网页导入课表、管理多份课表、手动补课、查看今日课程，并提供可切换的主题外观。
+JLU_schedule 是一个面向吉大学生的课表工具，支持通过教务网页导入课表、管理多份课表、手动补课、查看今日课程，并提供可切换的主题外观与深色模式。
 
-## APK下载
+## 安装包下载
 
 - Android: 前往Releases页下载[Releases](https://github.com/JFyuhong/JLU_schedule/releases)
-- ios: 如果你能帮我搞定`99$/每年`的开发者计划的话，开发一个也不是不行😂
+- iOS / 鸿蒙：源码位于 `ios/` 与 `harmonyos/` 目录，需自行用 Xcode / DevEco Studio 构建签名（构建说明见 PORTING.md）
+- iOS 备注: 如果你能帮我搞定`99$/每年`的开发者计划的话，上架 TestFlight 也不是不行😂
 
 ## 效果截图
 
@@ -32,35 +33,43 @@ JLU_schedule 是一个面向吉大学生的 Android 课表工具，支持通过�
 	- 可设置课程名、教师、地点、星期、节次、周次、单双周
 - 今日课程视图
 	- 展示今日课程列表、课程数量、最早/最晚上课时间
+	- 时间轴卡片式排版，正在进行的课程带"进行中"标识
+- 桌面小组件
+	- 在桌面直接查看今日课程与当前节次
+- 上课提醒
+	- 每日固定时间推送当日课程提醒，时间可自定义，重启后自动恢复（默认关闭）
+- 数据安全
+	- 存储写入原子化 + 并发加锁，元数据损坏自动从课程文件恢复
+	- 课表文本导出 / 全量备份与恢复（JSON）
 - 个性化设置
-	- 主题色切换（暖色、海蓝、薄荷）
+	- 主题色切换（暖色、海蓝、薄荷），支持深色模式（跟随系统/浅色/深色）
 	- 默认打开页面
-	- 课表字号
+	- 课表字号三档（小号 / 标准 / 大号）
 	- 是否显示非本周课程
 	- 自定义背景（选择与裁剪）
+- 课程详情
+	- 上拉浮动卡片展示教师 / 地点 / 周次 / 学期，点击条目一键复制
 
 ## 技术栈
 
-- Android (Kotlin)
-- Gradle (KTS)
-- Kotlinx Serialization (JSON)
-- WebView (网页导入)
-- Material Components
+- Android (Kotlin, WebView 导入, Material Components)
+- iOS (SwiftUI, WKWebView 导入, UNUserNotification 提醒)
+- 鸿蒙 (ArkUI, ArkWeb 导入, reminderAgentManager 提醒)
+- Kotlinx Serialization / Swift Codable / ArkTS（三端统一 v1 备份格式）
+- Gradle (KTS) / Xcode / DevEco Studio
 
 ## 项目结构
 
-- `app/src/main/java/cn/jlu/schedule/ui/`
-	- `timetable/`：课表页、手动加课、导入入口
-	- `today/`：今日课程页
-	- `settings/`：设置页与课表管理页
-	- `importer/`：网页导入 Activity
-	- `theme/`：主题调色板与统一 UI 反馈样式
-- `app/src/main/java/cn/jlu/schedule/data/`
-	- 偏好设置、课表持久化、多课表元数据
-- `app/src/main/java/cn/jlu/schedule/parser/`
-	- 教务 `.do` 数据解析器
+- `app/src/main/java/cn/jlu/schedule/`
+	- `ui/`：课表页、今日课程页、设置页、导入 Activity、主题
+	- `data/`：偏好设置、课表持久化、多课表元数据、备份编解码
+	- `parser/`：教务 `.do` 数据解析器
+	- `widget/`：今日课程桌面小组件
+	- `reminder/`：每日课程提醒
+- `ios/`：iOS 版（SwiftUI，核心逻辑与 Android 逐函数对齐，XCTest 覆盖）
+- `harmonyos/`：鸿蒙版（ArkUI，核心逻辑可用 `node verify/run.mjs` 在任意平台回归）
+- `docs/PORTING.md`：三端同步开发指南与核心逻辑对应表
 - `app/src/main/assets/`
-	- `sample_schedule.do`：示例课表
 	- `target.url`：校内导入入口
 	- `VPN.url`：校外导入入口
 
@@ -75,6 +84,32 @@ JLU_schedule 是一个面向吉大学生的 Android 课表工具，支持通过�
 	- 每份课表独立保存学期开始日期，导入时自动推断
 	- 增加导入页捕获状态、手动加课校验、原子写入与日志提示
 	- 清理 lint warning，并同步 target/compile SDK 到 36
+- v1.2
+	- 存储层加锁串行化，修复并发写入时元数据互相覆盖、临时文件交错损坏的问题
+	- meta.json 损坏时不再清空全部课表：自动从课程文件恢复，并保留损坏文件用于排查
+	- 修复删除课表先删文件后写元数据、导入覆盖非事务写入可能导致的悬空引用
+	- 周次解析增强：支持离散周次（第1,3,5周）、全角括号单双周、独立"单周/双周"、中文逗号分段、节次/周次反写自动纠正
+	- 统一默认学期开始日期逻辑，修复 9 月导入推断失败时周次被错钳到最后几周的问题
+	- 课表页保留用户浏览的周次，不再每次回到前台强制跳回本周；今日页支持跨午夜刷新
+	- 修复导入等待期间退出页面弹出对话框导致的崩溃（BadTokenException），导入改为协程 + 页面销毁保护
+	- 导入按钮防抖、手动加课防抖；导入页支持 WebView 后退、旋转不再丢失浏览状态
+	- 修复取消裁剪仍把原图设为背景的问题；清理历史导入缓存目录与残留临时文件
+	- 移除 gradle.properties 中机器专属 JDK 路径，修复他机构建失败
+	- 新增 WeekScheduleCalculator、ImportedScheduleStorage 单元测试，覆盖单双周、历史周、meta 恢复与并发写入
+	- 主题系统重构：三处重复色板合并为单一来源，全部界面跟随主题色联动；新增深色模式（跟随系统/浅色/深色）
+	- 数据层重构为 ScheduleRepository + StateFlow 单向数据流，数据变化自动刷新界面与小组件，移除主线程文件 IO 和"重建页面"式刷新
+	- 新增桌面小组件：在桌面直接查看今日课程
+	- 新增每日课程提醒通知，时间可自定义，重启后自动恢复
+	- 新增课表文本导出与全量备份/恢复（JSON 文件）
+	- 裁剪输出改用 FileProvider；导入页 SSL 证书校验失败改为逐主机人工确认，不再静默放行
+	- 升级 AGP 8.9.2 / Gradle 8.11.1，移除 compileSdk 36 抑制项；启用 R8 代码收缩与混淆
+	- 大量界面文案迁移到 strings.xml 资源
+	- 设置页重构为卡片分组式排版，分段选择器支持即时刷新高亮
+	- 课程详情改为浮动卡片样式，支持点击条目复制到剪贴板
+	- 今日页改为时间轴卡片视觉，进行中课程显示"进行中"标识
+	- 重绘全套矢量图标（底栏导航 / 设置页 / 详情页 / 右上角操作），修复启动图标缺失与个别图标边缘截断
+	- 课表网格字号重新调优：三档字号（小号/标准/大号），中文课程名与地点在窄列下自动缩放换行
+	- 上课提醒默认改为关闭，避免首次使用即弹通知
 
 ## 快速开始
 
