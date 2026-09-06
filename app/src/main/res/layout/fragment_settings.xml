@@ -147,6 +147,36 @@
                 android:text="@string/settings_account_hint" />
         </LinearLayout>
 
+        <!-- 工具 -->
+        <LinearLayout
+            android:id="@+id/settingsCardTools"
+            style="@style/SettingsCard">
+
+            <LinearLayout style="@style/SettingsCardHeader">
+                <ImageView
+                    android:id="@+id/iconTools"
+                    style="@style/SettingsCardIcon"
+                    android:src="@drawable/ic_settings_tools"
+                    android:contentDescription="@null" />
+                <TextView
+                    style="@style/SettingsCardTitle"
+                    android:text="@string/settings_tools" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowGpaCalculator"
+                style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_tool_gpa" />
+                <ImageView style="@style/SettingsRowChevron" android:contentDescription="@null" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/SettingsCardHint"
+                android:text="@string/settings_tool_gpa_hint" />
+        </LinearLayout>
+
         <!-- 外观 -->
         <LinearLayout
             android:id="@+id/settingsCardAppearance"
@@ -371,7 +401,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:text="JLU Schedule 1.2.0"
+            android:text="JLU Schedule 2.0.0-alpha"
             android:textColor="?android:attr/textColorSecondary"
             android:textSize="12sp"
             android:layout_marginTop="8dp" />

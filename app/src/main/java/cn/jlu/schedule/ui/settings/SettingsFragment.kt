@@ -124,6 +124,7 @@ class SettingsFragment : Fragment() {
         listOf(
             view.findViewById<LinearLayout>(R.id.settingsCardTimetable),
             view.findViewById<LinearLayout>(R.id.settingsCardAccount),
+            view.findViewById<LinearLayout>(R.id.settingsCardTools),
             view.findViewById<LinearLayout>(R.id.settingsCardAppearance),
             view.findViewById<LinearLayout>(R.id.settingsCardReminder),
             view.findViewById<LinearLayout>(R.id.settingsCardBackground),
@@ -142,6 +143,7 @@ class SettingsFragment : Fragment() {
         listOf(
             view.findViewById<View>(R.id.iconTimetable),
             view.findViewById<View>(R.id.iconAccount),
+            view.findViewById<View>(R.id.iconTools),
             view.findViewById<View>(R.id.iconAppearance),
             view.findViewById<View>(R.id.iconReminder),
             view.findViewById<View>(R.id.iconBackground),
@@ -166,6 +168,11 @@ class SettingsFragment : Fragment() {
 
         view.findViewById<View>(R.id.rowManageTimetable).setOnClickListener {
             manageProfilesLauncher.launch(Intent(requireContext(), TimetableManageActivity::class.java))
+        }
+
+        // 工具卡片
+        view.findViewById<View>(R.id.rowGpaCalculator).setOnClickListener {
+            startActivity(Intent(requireContext(), cn.jlu.schedule.ui.tools.GpaCalculatorActivity::class.java))
         }
 
         // 校园账号卡片

@@ -26,6 +26,10 @@
             android:name=".ui.settings.TimetableManageActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.tools.GpaCalculatorActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
             android:name=".ui.auth.LoginActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="false"

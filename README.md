@@ -41,6 +41,8 @@ JLU_schedule 是一个面向吉大学生的课表工具，支持通过教务网�
 - 数据安全
 	- 存储写入原子化 + 并发加锁，元数据损坏自动从课程文件恢复
 	- 课表文本导出 / 全量备份与恢复（JSON）
+- 工具箱
+	- 绩点计算器：手动录入成绩与学分（百分制 / 五级制），实时估算保研绩点（4.0 制）、加权平均分与算术平均分，逐门可计入/排除（原生改造自 [DailyPotato/JLU-GPA-Calculator](https://github.com/DailyPotato/JLU-GPA-Calculator) 与 [Coldymemos/JLU-GPA-Calculator-for-Windows-Desktop](https://github.com/Coldymemos/JLU-GPA-Calculator-for-Windows-Desktop)，已获原作者同意）
 - 个性化设置
 	- 主题色切换（暖色、海蓝、薄荷），支持深色模式（跟随系统/浅色/深色）
 	- 默认打开页面
@@ -61,8 +63,9 @@ JLU_schedule 是一个面向吉大学生的课表工具，支持通过教务网�
 ## 项目结构
 
 - `app/src/main/java/cn/jlu/schedule/`
-	- `ui/`：课表页、今日课程页、设置页、导入 Activity、主题
+	- `ui/`：课表页、今日课程页、设置页、导入 Activity、绩点计算器、主题
 	- `data/`：偏好设置、课表持久化、多课表元数据、备份编解码
+	- `domain/`：周次推算、绩点计算等纯逻辑（JUnit 覆盖）
 	- `parser/`：教务 `.do` 数据解析器
 	- `auth/`：统一身份认证（cas.jlu.edu.cn TPASS）原生客户端、加密凭据存储、持久化 CookieJar
 	- `remote/`：教务平台 HTTP 客户端、端点注册表、一键导入编排
@@ -81,6 +84,7 @@ JLU_schedule 是一个面向吉大学生的课表工具，支持通过教务网�
 	- 首次登录复用 WebView 会话；登录成功后 Cookie 自动迁移进原生客户端持久化
 	- 新增"一键导入课表"：复用内置浏览器的登录 Cookie，隐藏 WebView 自动打开课表页捕获接口数据并入库，全程免操作（登录 Cookie 来自"我在校内"网页导入或校园账号登录）；校园域私有证书沿用网页导入时用户的信任决策自动放行
 	- 会话持久化策略：Cookie 落盘跨启动复用 + 访问前校验 + 失效静默重登（TPASS 3DES 加密提交，已与网页端 des.js 逐字节对拍）
+	- 新增设置页"工具"卡片与绩点计算器：支持百分制 / 五级制（优秀95·良好85·中等75·及格65·不及格0 折算）成绩与学分录入，实时计算保研绩点（90+→4.0 档位映射）、加权平均分、算术平均分，逐门计入/排除并本地持久化；计算规则原生改造自 DailyPotato/JLU-GPA-Calculator 与 Coldymemos/JLU-GPA-Calculator-for-Windows-Desktop（已获原作者同意），非官方规则，以学院文件为准
 	- 密码经 Android Keystore 加密存储（EncryptedSharedPreferences），不参与云备份/设备迁移
 	- 服务层骨架：为成绩查询、绩点计算、考试安排、培养方案查询预留端点注册表（待真实账号抓包确认后实现）
 - v1.0 项目初始化更新
