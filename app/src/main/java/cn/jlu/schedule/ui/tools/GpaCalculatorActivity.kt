@@ -1,10 +1,18 @@
 package cn.jlu.schedule.ui.tools
 
+import android.annotation.SuppressLint
+import android.content.Intent
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -16,17 +24,32 @@ import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
 import cn.jlu.schedule.R
+import cn.jlu.schedule.auth.CampusCookieJar
+import cn.jlu.schedule.auth.CasLoginResult
+import cn.jlu.schedule.auth.TpassConfig
 import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.data.GpaCourseStore
 import cn.jlu.schedule.domain.GpaCalculator
 import cn.jlu.schedule.domain.GpaCourse
 import cn.jlu.schedule.domain.GpaGradeType
+import cn.jlu.schedule.parser.GradeTranscriptParser
+import cn.jlu.schedule.remote.JwApiClient
+import cn.jlu.schedule.ui.auth.LoginActivity
 import cn.jlu.schedule.ui.theme.ThemePalette
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 import cn.jlu.schedule.ui.theme.UiFeedback
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.security.MessageDigest
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 绩点计算器：原生改造自 DailyPotato/JLU-GPA-Calculator 与
@@ -55,6 +78,27 @@ class GpaCalculatorActivity : AppCompatActivity() {
     private var selectedLevel = GpaCalculator.LEVEL_ORDER.first()
     private var levelButtons: List<Pair<String, TextView>> = emptyList()
 
+    private var importing = false
+    private lateinit var importButton: Button
+
+    // ===== 教务成绩抓取：隐藏 WebView 打开成绩查询页，捕获页面自身的成绩接口响应 =====
+    private lateinit var fetchWebView: WebView
+    private val capturedPayloads = ArrayList<Pair<String, String>>()
+    private var fetchQuietJob: Job? = null
+    private var fetchWatchdogJob: Job? = null
+    private var autoQueryJob: Job? = null
+    private var fetchSilentLoginTried = false
+    private var fetchAutoQueryTries = 0
+    private val fetchFinished = AtomicBoolean(false)
+    private val fetchServedLoginHtml = AtomicBoolean(false)
+
+    private val loginLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        // 登录成功后自动重试教务导入
+        if (result.resultCode == RESULT_OK) importFromJw()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         ThemePaletteProvider.applyNightMode(this)
         setTheme(ThemePaletteProvider.themeStyleFor(AppPreferences.getThemeColor(this)))
@@ -80,6 +124,7 @@ class GpaCalculatorActivity : AppCompatActivity() {
         applySystemBarInsets()
         applyTheme()
         bindAddForm()
+        setupFetchWebView()
         render()
     }
 
@@ -105,6 +150,8 @@ class GpaCalculatorActivity : AppCompatActivity() {
         val clearButton = findViewById<Button>(R.id.gpaClearButton)
         UiFeedback.stylePrimaryButton(addButton, palette)
         UiFeedback.styleDangerButton(clearButton, palette)
+        importButton = findViewById(R.id.gpaImportButton)
+        UiFeedback.styleSecondaryButton(importButton, palette)
     }
 
     private fun bindAddForm() {
@@ -130,6 +177,318 @@ class GpaCalculatorActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.gpaAddButton).setOnClickListener { addCourse() }
         findViewById<Button>(R.id.gpaClearButton).setOnClickListener { confirmClearAll() }
+        importButton.setOnClickListener { importFromJw() }
+    }
+
+    /**
+     * 从教务系统拉取成绩：原生直连模块接口被网关 403 拦截（仅放行页面自身请求），
+     * 因此用隐藏 WebView 打开成绩查询页，钩子捕获页面自己的成绩响应。
+     */
+    private fun importFromJw() {
+        if (importing) return
+        importing = true
+        importButton.isEnabled = false
+        resultMeta.text = getString(R.string.gpa_import_progress)
+        startWebViewGradeFetch()
+    }
+
+    @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
+    private fun setupFetchWebView() {
+        fetchWebView = findViewById(R.id.gpaFetchWebView)
+        fetchWebView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+        }
+        CookieManager.getInstance().apply {
+            setAcceptCookie(true)
+            setAcceptThirdPartyCookies(fetchWebView, true)
+        }
+        fetchWebView.addJavascriptInterface(GradeCaptureBridge(), "GpaGradeBridge")
+        fetchWebView.webViewClient = GradeFetchWebViewClient()
+    }
+
+    private fun startWebViewGradeFetch() {
+        fetchFinished.set(false)
+        fetchServedLoginHtml.set(false)
+        fetchSilentLoginTried = false
+        fetchAutoQueryTries = 0
+        synchronized(capturedPayloads) { capturedPayloads.clear() }
+        CookieManager.getInstance().apply {
+            setAcceptCookie(true)
+            setAcceptThirdPartyCookies(fetchWebView, true)
+        }
+        fetchWebView.loadUrl(GRADE_PAGE_URL)
+        fetchWatchdogJob?.cancel()
+        fetchWatchdogJob = lifecycleScope.launch {
+            delay(FETCH_TIMEOUT_MS)
+            finishFetch(reason = "timeout")
+        }
+        scheduleAutoQueryRounds()
+    }
+
+    /** 成绩页不保证自动查询：多轮尝试点按钮，并回报 DOM 结构便于诊断 */
+    private fun scheduleAutoQueryRounds() {
+        autoQueryJob?.cancel()
+        autoQueryJob = lifecycleScope.launch {
+            val rounds = intArrayOf(2, 6, 11, 17, 23)
+            for (i in rounds.indices) {
+                if (i > 0) delay((rounds[i] - rounds[i - 1]) * 1000L) else delay(rounds[i] * 1000L)
+                if (fetchFinished.get()) return@launch
+                val round = i + 1
+                val bridge = GradeCaptureBridge()
+                bridge.autoQuery(round)
+            }
+        }
+    }
+
+    private inner class GradeFetchWebViewClient : WebViewClient() {
+
+        override fun shouldInterceptRequest(
+            view: WebView,
+            request: WebResourceRequest
+        ): WebResourceResponse? {
+            if (fetchFinished.get() || !request.isForMainFrame) return null
+            val url = request.url
+            if (url.host != TpassConfig.IEDU_HOST || request.method != "GET") return null
+            if (url.encodedPath?.endsWith(".do") != true) return null
+            return runCatching { buildHookedGradeDocument(url) }
+                .onFailure { Log.w(TAG, "grade intercept failed: ${it.message}") }
+                .getOrNull()
+        }
+
+        override fun onReceivedSslError(
+            view: WebView,
+            handler: android.webkit.SslErrorHandler,
+            error: android.net.http.SslError
+        ) {
+            // 校园私有 CA：与网页导入/一键导入一致的信任决策（仅限校园域）
+            val host = runCatching { android.net.Uri.parse(error.url ?: "").host ?: "" }.getOrDefault("")
+            if (host.endsWith(CampusCookieJar.ALLOWED_DOMAIN_SUFFIX, ignoreCase = true)) {
+                handler.proceed()
+            } else {
+                handler.cancel()
+            }
+        }
+
+        override fun onPageFinished(view: WebView, url: String) {
+            if (fetchFinished.get()) return
+            if (fetchServedLoginHtml.compareAndSet(true, false)) {
+                handleFetchLogin()
+                return
+            }
+            val host = runCatching { android.net.Uri.parse(url).host ?: "" }.getOrDefault("")
+            if (host == TpassConfig.CAS_HOST) {
+                handleFetchLogin()
+            }
+        }
+    }
+
+    /** 主文档拦截下载 + 注入捕获钩子；命中 CAS 登录页时标记待重登 */
+    private fun buildHookedGradeDocument(target: android.net.Uri): WebResourceResponse {
+        val connection = java.net.URL(target.toString()).openConnection() as javax.net.ssl.HttpsURLConnection
+        connection.connectTimeout = 15000
+        connection.readTimeout = 20000
+        connection.instanceFollowRedirects = true
+        if (target.host?.endsWith(CampusCookieJar.ALLOWED_DOMAIN_SUFFIX, ignoreCase = true) == true) {
+            connection.sslSocketFactory = trustingSslContext().socketFactory
+            connection.setHostnameVerifier(javax.net.ssl.HostnameVerifier { _, _ -> true })
+        }
+        CookieManager.getInstance().getCookie(target.toString())?.let {
+            connection.setRequestProperty("Cookie", it)
+        }
+        connection.setRequestProperty("User-Agent", TpassConfig.USER_AGENT)
+        connection.setRequestProperty("Referer", TpassConfig.IEDU_PORTAL_URL)
+        connection.connect()
+        val mimeType = connection.contentType?.substringBefore(';')?.trim() ?: "text/html"
+        val body = connection.inputStream.use { it.readBytes() }
+        Log.i(TAG, "grade page doc $target -> ${connection.responseCode} $mimeType len=${body.size}")
+        if (!mimeType.contains("html", ignoreCase = true)) {
+            return WebResourceResponse(mimeType, "UTF-8", body.inputStream())
+        }
+        var html = String(body, Charsets.UTF_8)
+        if (html.contains("id=\"loginForm\"") || html.contains("id=\"lt\"")) {
+            fetchServedLoginHtml.set(true)
+            return WebResourceResponse(mimeType, "UTF-8", html.byteInputStream())
+        }
+        if (!html.contains("__jluGradeHooked")) {
+            val script = "<script>$GRADE_HOOK_JS</script>"
+            val headTag = Regex("(?i)<head[^>]*>").find(html)
+            html = if (headTag != null) {
+                StringBuilder(html).insert(headTag.range.last + 1, script).toString()
+            } else {
+                script + html
+            }
+        }
+        return WebResourceResponse(mimeType, "UTF-8", html.byteInputStream())
+    }
+
+    private fun handleFetchLogin() {
+        if (fetchSilentLoginTried) {
+            finishFetch(reason = "need-login")
+            return
+        }
+        fetchSilentLoginTried = true
+        resultMeta.text = getString(R.string.import_quick_progress_relogin)
+        lifecycleScope.launch {
+            val result = JwApiClient.silentLogin(this@GpaCalculatorActivity)
+            if (result is CasLoginResult.Success) {
+                JwApiClient.syncJarToWebView(this@GpaCalculatorActivity)
+                if (!fetchFinished.get()) fetchWebView.post { fetchWebView.loadUrl(GRADE_PAGE_URL) }
+            } else {
+                finishFetch(reason = "need-login")
+            }
+        }
+    }
+
+    private fun onGradePayloadCaptured(url: String, text: String) {
+        if (fetchFinished.get() || text.length < MIN_CAPTURE_BYTES) return
+        synchronized(capturedPayloads) {
+            val key = sha1(url + "|" + text.take(256))
+            if (capturedPayloads.any { sha1(it.first + "|" + it.second.take(256)) == key }) return
+            capturedPayloads.add(url to text)
+            Log.i(TAG, "captured grade-ish payload #${capturedPayloads.size} ($url, ${text.length} bytes)")
+        }
+        // 滚动静默期：每次新捕获重置，收齐页面全部查询后再解析
+        fetchQuietJob?.cancel()
+        fetchQuietJob = lifecycleScope.launch {
+            delay(CAPTURE_QUIET_MS)
+            finishFetch(reason = "quiet")
+        }
+    }
+
+    private fun finishFetch(reason: String) {
+        if (!fetchFinished.compareAndSet(false, true)) return
+        fetchWatchdogJob?.cancel()
+        fetchQuietJob?.cancel()
+        val grades = synchronized(capturedPayloads) {
+            capturedPayloads.asSequence()
+                .filter { GradeTranscriptParser.isLikelyGradePayload(it.second) }
+                .flatMap { GradeTranscriptParser.parse(it.second).asSequence() }
+                .toList()
+        }
+        Log.i(TAG, "grade fetch finish ($reason): ${grades.size} grades from ${capturedPayloads.size} payloads")
+        runOnUiThread {
+            if (!::importButton.isInitialized || isDestroyed || isFinishing) return@runOnUiThread
+            importing = false
+            importButton.isEnabled = true
+            if (grades.isNotEmpty()) {
+                applyImported(GpaCalculator.mergeImported(grades))
+            } else {
+                render()
+                when (reason) {
+                    "need-login" -> promptLogin()
+                    else -> UiFeedback.showMessage(courseList, getString(R.string.gpa_import_empty), palette)
+                }
+            }
+        }
+    }
+
+    private inner class GradeCaptureBridge {
+        @JavascriptInterface
+        fun onCaptured(url: String?, content: String?) {
+            val safeUrl = url.orEmpty()
+            val body = content.orEmpty()
+            runOnUiThread { onGradePayloadCaptured(safeUrl, body) }
+        }
+
+        /** 页面上下文内的自动查询：round 1 回报可点元素，round≥2 按文本点页签与查询按钮 */
+        @JavascriptInterface
+        fun autoQuery(round: Int) {
+            if (fetchFinished.get()) return
+            val js = if (round <= 1) {
+                """
+                (function(){
+                  var out = [];
+                  document.querySelectorAll('button, a, input, .btn, [role=button], span[class], div[class], i[class], li').forEach(function(el){
+                    var t = ((el.innerText || el.value || '') + '').trim().split('\n')[0];
+                    if (!t || t.length > 10) return;
+                    var c = ((el.className && el.className.toString()) || '').slice(0, 40);
+                    out.push(el.tagName + '|' + c + '|' + t);
+                  });
+                  try { GpaGradeBridge.onCaptured('dom-report', 'round=$round count=' + out.length + ' :: ' + out.join(';;').slice(0, 1600)); } catch(e) {}
+                })()
+                """.trimIndent()
+            } else {
+                """
+                (function(){
+                  var tabs = ['历年成绩','全部成绩','入学以来','全部','历年'];
+                  var buttons = ['查询','搜索','确定'];
+                  function textOf(el){ return ((el.innerText || el.value || '') + '').trim().split('\n')[0]; }
+                  function clickIf(el, words){
+                    var t = textOf(el);
+                    if (!t || t.length > 6) return false;
+                    for (var i = 0; i < words.length; i++) { if (t.indexOf(words[i]) >= 0) { try { el.click(); return true; } catch(e) {} } }
+                    return false;
+                  }
+                  var clicked = [];
+                  document.querySelectorAll('button, a, input[type=button], input[type=submit], .btn, .bh-btn, [role=button], span, div, i, li').forEach(function(el){
+                    if (clicked.length > 6) return;
+                    if (clickIf(el, tabs)) clicked.push(textOf(el) + ':tab');
+                    else if (clickIf(el, buttons)) clicked.push(textOf(el) + ':btn');
+                  });
+                  try { GpaGradeBridge.onCaptured('autoclick', 'round=$round clicked=' + clicked.join(',') + ' total=' + document.querySelectorAll('*').length); } catch(e) {}
+                })()
+                """.trimIndent()
+            }
+            runOnUiThread {
+                if (!fetchFinished.get() && !isDestroyed) {
+                    runCatching { fetchWebView.evaluateJavascript(js, null) }
+                }
+            }
+        }
+    }
+
+    private fun trustingSslContext(): javax.net.ssl.SSLContext {
+        return javax.net.ssl.SSLContext.getInstance("TLS").apply {
+            init(null, arrayOf<javax.net.ssl.TrustManager>(object : javax.net.ssl.X509TrustManager {
+                override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) = Unit
+                override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) = Unit
+                override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
+            }), java.security.SecureRandom())
+        }
+    }
+
+    private fun sha1(value: String): String =
+        MessageDigest.getInstance("SHA-1").digest(value.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+
+    private fun applyImported(imported: List<GpaCourse>) {
+        if (imported.isEmpty()) {
+            UiFeedback.showMessage(courseList, getString(R.string.gpa_import_empty), palette)
+            render()
+            return
+        }
+        if (courses.isEmpty()) {
+            replaceCourses(imported)
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.gpa_import_jw))
+            .setMessage(getString(R.string.gpa_import_confirm, imported.size, courses.size))
+            .setPositiveButton(getString(R.string.gpa_import_replace)) { _, _ -> replaceCourses(imported) }
+            .setNegativeButton(getString(R.string.action_cancel), null)
+            .create()
+            .also { UiFeedback.styleDialogSurface(it, palette); it.show() }
+    }
+
+    private fun replaceCourses(imported: List<GpaCourse>) {
+        courses.clear()
+        courses.addAll(imported)
+        persist()
+        render()
+        UiFeedback.showMessage(courseList, getString(R.string.gpa_import_success, imported.size), palette)
+    }
+
+    private fun promptLogin() {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.gpa_import_need_login))
+            .setMessage(getString(R.string.account_login_hint))
+            .setPositiveButton(getString(R.string.gpa_import_go_login)) { _, _ ->
+                loginLauncher.launch(Intent(this, LoginActivity::class.java))
+            }
+            .setNegativeButton(getString(R.string.action_cancel), null)
+            .create()
+            .also { UiFeedback.styleDialogSurface(it, palette); it.show() }
     }
 
     private fun addCourse() {
@@ -352,8 +711,64 @@ class GpaCalculatorActivity : AppCompatActivity() {
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
+    override fun onDestroy() {
+        fetchQuietJob?.cancel()
+        fetchWatchdogJob?.cancel()
+        autoQueryJob?.cancel()
+        if (::fetchWebView.isInitialized) {
+            fetchWebView.apply {
+                loadUrl("about:blank")
+                onPause()
+            }
+        }
+        super.onDestroy()
+    }
+
     private companion object {
         const val TAG = "GpaCalculator"
         const val DASH = "—"
+
+        /** 捕获静默期：成绩页可能连续查询多个视图，停稳后再统一解析 */
+        const val CAPTURE_QUIET_MS = 4_000L
+
+        /** 整体超时：含登录页重定向与自动点击等待 */
+        const val FETCH_TIMEOUT_MS = 28_000L
+
+        const val MIN_CAPTURE_BYTES = 60
+
+        const val GRADE_PAGE_URL = "https://iedu.jlu.edu.cn/jwapp/sys/cjcx/*default/index.do"
+
+        /** XHR/fetch 响应捕获钩子（与一键导入同思路，注入到页面 <head> 后） */
+        private val GRADE_HOOK_JS = """
+            (function(){
+              if(window.__jluGradeHooked) return; window.__jluGradeHooked = true;
+              function send(url, text){
+                try { GpaGradeBridge.onCaptured(url, text); } catch(e) {}
+              }
+              var origOpen = XMLHttpRequest.prototype.open;
+              var origSend = XMLHttpRequest.prototype.send;
+              XMLHttpRequest.prototype.open = function(m, u){ this.__u = u; return origOpen.apply(this, arguments); };
+              XMLHttpRequest.prototype.send = function(){
+                this.addEventListener('load', function(){
+                  var text = '';
+                  try { text = this.responseText || ''; } catch(e) {
+                    try { text = JSON.stringify(this.response || ''); } catch(e2) {}
+                  }
+                  try { send(this.__u || '', text); } catch(e) {}
+                });
+                return origSend.apply(this, arguments);
+              };
+              var origFetch = window.fetch;
+              if (origFetch) {
+                window.fetch = function(){
+                  var u = arguments[0]; var url = (typeof u === 'string') ? u : (u && u.url) || '';
+                  return origFetch.apply(this, arguments).then(function(resp){
+                    try { resp.clone().text().then(function(t){ send(url, t); }); } catch(e) {}
+                    return resp;
+                  });
+                };
+              }
+            })();
+        """.trimIndent()
     }
 }

@@ -62,6 +62,10 @@ class QuickImportActivity : AppCompatActivity() {
     private val importStarted = AtomicBoolean(false)
     private var silentLoginTried = false
     private var fallbackPageLoaded = false
+
+    /** 会话过期时教务域不改 URL 直接返回 CAS 登录页 HTML，需在内容层识别后触发静默重登 */
+    @Volatile
+    private var casLoginHtmlServed = false
     private var fallbackFetchDone = false
     private var indexCounter = 0
     private var importJob: kotlinx.coroutines.Job? = null
@@ -154,6 +158,11 @@ class QuickImportActivity : AppCompatActivity() {
                 if (handled.get()) return
                 val host = runCatching { android.net.Uri.parse(url).host ?: "" }.getOrDefault("")
                 injectCaptureHook(view)
+                if (casLoginHtmlServed) {
+                    casLoginHtmlServed = false
+                    onCasLoginPage(url)
+                    return
+                }
                 when {
                     host == TpassConfig.CAS_HOST -> onCasLoginPage(url)
                     url.startsWith(SCHEDULE_API_URL) -> onApiPageFinished(view, url)
@@ -252,6 +261,13 @@ class QuickImportActivity : AppCompatActivity() {
             }
         }
         var html = String(body, Charsets.UTF_8)
+        if (html.contains("id=\"loginForm\"") || html.contains("id=\"lt\"")) {
+            Log.i(TAG, "served doc is CAS login page ($target), will trigger silent relogin")
+            casLoginHtmlServed = true
+            return WebResourceResponse(mimeType, "UTF-8", html.byteInputStream()).apply {
+                responseHeaders = headers
+            }
+        }
         if (!html.contains("__jluQuickHooked")) {
             val script = "<script>$HOOK_JS</script>"
             val headTag = Regex("(?i)<head[^>]*>").find(html)

@@ -16,6 +16,7 @@ import cn.jlu.schedule.ui.settings.SettingsFragment
 import cn.jlu.schedule.ui.timetable.TimetableFragment
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 import cn.jlu.schedule.ui.today.TodayScheduleFragment
+import cn.jlu.schedule.ui.tools.ToolsFragment
 
 class MainActivity : AppCompatActivity() {
     private lateinit var rootContainer: FrameLayout
@@ -62,6 +63,13 @@ class MainActivity : AppCompatActivity() {
                 R.id.nav_today -> {
                     supportFragmentManager.beginTransaction()
                         .replace(R.id.mainContainer, TodayScheduleFragment())
+                        .commit()
+                    true
+                }
+
+                R.id.nav_tools -> {
+                    supportFragmentManager.beginTransaction()
+                        .replace(R.id.mainContainer, ToolsFragment())
                         .commit()
                     true
                 }

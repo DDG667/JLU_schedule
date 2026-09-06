@@ -136,6 +136,14 @@
                 android:textColor="?android:attr/textColorSecondary" />
         </LinearLayout>
 
+        <Button
+            android:id="@+id/gpaImportButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="10dp"
+            android:text="@string/gpa_import_jw" />
+
         <!-- 课程列表 -->
         <TextView
             android:layout_width="match_parent"
@@ -280,5 +288,12 @@
                     android:text="@string/gpa_clear" />
             </LinearLayout>
         </LinearLayout>
+
+        <!-- 隐藏的成绩抓取 WebView（打开教务成绩页并捕获页面自身请求） -->
+        <WebView
+            android:id="@+id/gpaFetchWebView"
+            android:layout_width="1dp"
+            android:layout_height="1dp"
+            android:visibility="invisible" />
     </LinearLayout>
 </ScrollView>

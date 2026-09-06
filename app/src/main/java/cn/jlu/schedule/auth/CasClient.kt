@@ -49,11 +49,6 @@ class CasClient(private val client: OkHttpClient) {
                         // 未跳转到登录页说明已有会话，视为成功
                         CasLoginResult.Success
                     }
-                if (html.contains("captcha", ignoreCase = true) &&
-                    html.contains("验证码")
-                ) {
-                    return@withContext CasLoginResult.NeedsManualLogin
-                }
 
                 val rsa = TpassDes.encrypt(username + password + form.lt, "1", "2", "3")
                 val bodyBuilder = FormBody.Builder()
@@ -77,9 +72,11 @@ class CasClient(private val client: OkHttpClient) {
                     val stillOnLogin = finalUrl.host == TpassConfig.CAS_HOST &&
                         finalBody.contains("id=\"loginForm\"")
                     if (!stillOnLogin) {
+                        android.util.Log.i("CasClient", "tpass login ok, final=${finalUrl.host}${finalUrl.encodedPath}")
                         return@withContext CasLoginResult.Success
                     }
                     val errorText = TpassFormParser.extractError(finalBody)
+                    android.util.Log.w("CasClient", "tpass login rejected: $errorText, bodyLen=${finalBody.length}")
                     if (finalBody.contains("验证码")) {
                         CasLoginResult.NeedsManualLogin
                     } else {
@@ -88,6 +85,7 @@ class CasClient(private val client: OkHttpClient) {
                 }
             }
         } catch (error: Exception) {
+            android.util.Log.w("CasClient", "tpass login error", error)
             CasLoginResult.Error(error.message ?: "网络异常")
         }
     }

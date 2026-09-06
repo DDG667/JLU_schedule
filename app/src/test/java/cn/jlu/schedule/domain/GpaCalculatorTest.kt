@@ -132,6 +132,38 @@ class GpaCalculatorTest {
     }
 
     @Test
+    fun `merge imported grades keeps highest per course code`() {
+        val grades = listOf(
+            ImportedGrade(courseCode = "CS101", name = "数据结构", credit = 3.0, scoreText = "58", semesterCode = "2024-2025-2"),
+            ImportedGrade(courseCode = "CS101", name = "数据结构", credit = 3.0, scoreText = "85", semesterCode = "2025-2026-1"),
+            ImportedGrade(courseCode = "CS102", name = "数据结构", credit = 3.0, scoreText = "70", semesterCode = "2025-2026-1"),
+            ImportedGrade(courseCode = "", name = "讲座", credit = 1.0, scoreText = "90", semesterCode = "2025-2026-1"),
+            ImportedGrade(courseCode = "", name = "讲座", credit = 1.0, scoreText = "80", semesterCode = "2025-2026-2"),
+            ImportedGrade(courseCode = "XX900", name = "缓考课", credit = 2.0, scoreText = "缓考", semesterCode = "2025-2026-1")
+        )
+        val courses = GpaCalculator.mergeImported(grades)
+
+        // 同课程号重修取最高；同名不同号不合并；无课程号按 课程名+学期 去重；缓考丢弃
+        assertEquals(4, courses.size)
+        assertEquals(85.0, courses.first { it.name == "数据结构" && it.id == "jw-CS101-2025-2026-1" }.score, 1e-9)
+        assertEquals(70.0, courses.first { it.id == "jw-CS102-2025-2026-1" }.score, 1e-9)
+        assertEquals(90.0, courses.first { it.id == "jw--2025-2026-1" }.score, 1e-9)
+        assertEquals(80.0, courses.first { it.id == "jw--2025-2026-2" }.score, 1e-9)
+        assertTrue(courses.none { it.name == "缓考课" })
+    }
+
+    @Test
+    fun `merge maps level grades to level5 courses`() {
+        val courses = GpaCalculator.mergeImported(
+            listOf(ImportedGrade(courseCode = "PE100", name = "体育", credit = 1.0, scoreText = "良好"))
+        )
+        assertEquals(1, courses.size)
+        assertEquals(GpaGradeType.LEVEL5, courses[0].gradeType)
+        assertEquals("良好", courses[0].level)
+        assertEquals(3.3, GpaCalculator.calculate(courses).recommendationGpa!!, 1e-9)
+    }
+
+    @Test
     fun `course store roundtrip keeps order and flags`() {
         val temp = org.junit.rules.TemporaryFolder()
         temp.create()

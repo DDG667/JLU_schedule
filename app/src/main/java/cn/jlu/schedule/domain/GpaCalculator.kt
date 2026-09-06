@@ -38,6 +38,17 @@ data class GpaCourse(
     val displayName: String get() = name.ifBlank { "未命名课程" }
 }
 
+/** 教务系统导入的一条成绩记录（金智 xscjcx.do 的常用字段） */
+data class ImportedGrade(
+    /** 课程号（KCH），重修去重的主键；缺失时退化为 课程名+学期 */
+    val courseCode: String = "",
+    val name: String = "",
+    val credit: Double,
+    /** 原始成绩文本：百分制数字或五级制等级（优秀/良好/中等/及格/不及格） */
+    val scoreText: String = "",
+    val semesterCode: String = ""
+)
+
 object GpaCalculator {
 
     /** 百分制 → 绩点映射档位：[minInclusive, 下一个档位 min) → gradePoint */
@@ -131,5 +142,51 @@ object GpaCalculator {
         val weighted = included.sumOf { it.effectiveScore * it.course.credit } / creditSum
         val arithmetic = included.sumOf { it.effectiveScore } / included.size
         return Summary(gpa, weighted, arithmetic, included.size, creditSum, breakdowns)
+    }
+
+    /**
+     * 导入成绩 → 计算器课程：同一课程号只保留最高有效成绩（重修取高，与两个参考实现一致），
+     * 同名不同课程号不合并；无法识别的成绩（缓考/旷考/空值等）丢弃。
+     */
+    fun mergeImported(grades: List<ImportedGrade>): List<GpaCourse> {
+        val best = LinkedHashMap<String, ImportedGrade>()
+        for (grade in grades) {
+            val key = grade.courseCode.ifBlank { "${grade.name}|${grade.semesterCode}" }
+            val existing = best[key]
+            if (existing == null || importedEffectiveScore(grade) > importedEffectiveScore(existing)) {
+                best[key] = grade
+            }
+        }
+        return best.values.mapNotNull { it.toGpaCourse() }
+    }
+
+    private fun importedEffectiveScore(grade: ImportedGrade): Double {
+        val asNumber = grade.scoreText.toDoubleOrNull()
+        return when {
+            asNumber != null && asNumber >= MIN_SCORE && asNumber <= MAX_SCORE -> asNumber
+            else -> LEVEL_SCORES[grade.scoreText] ?: -1.0
+        }
+    }
+
+    private fun ImportedGrade.toGpaCourse(): GpaCourse? {
+        val asNumber = scoreText.toDoubleOrNull()
+        val id = "jw-$courseCode-$semesterCode"
+        return when {
+            asNumber != null && asNumber >= MIN_SCORE && asNumber <= MAX_SCORE -> GpaCourse(
+                id = id,
+                name = name,
+                gradeType = GpaGradeType.PERCENT,
+                score = asNumber,
+                credit = credit
+            )
+            LEVEL_SCORES.containsKey(scoreText) -> GpaCourse(
+                id = id,
+                name = name,
+                gradeType = GpaGradeType.LEVEL5,
+                level = scoreText,
+                credit = credit
+            )
+            else -> null
+        }
     }
 }
