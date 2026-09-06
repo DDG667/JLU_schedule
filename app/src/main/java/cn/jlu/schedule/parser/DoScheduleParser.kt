@@ -9,23 +9,29 @@ import cn.jlu.schedule.model.WeekRule
 import cn.jlu.schedule.model.Weekday
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 
 object DoScheduleParser {
+    private const val DEFAULT_TOTAL_WEEKS = 20
+    private const val MAX_WEEK = 30
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
     }
 
-    private val segmentRegex = Regex("""^\s*(.+?)\s+星期([一二三四五六日天])\s+第(\d+)节-第(\d+)节\s*(.*)\s*$""")
-    private val weekItemRegex = Regex("""(\d+)(?:-(\d+))?周(?:\((单|双)\))?""")
+    private val segmentRegex =
+        Regex("""^\s*(.*?)\s*星期([一二三四五六日天])\s*第\s*(\d+)\s*节?\s*[-—–~～至]\s*第?\s*(\d+)\s*节?\s*(.*)$""")
+    private val weekItemRegex = Regex("""第?(\d+)\s*(?:-\s*(\d+))?\s*周(?:\s*[（(]\s*(单|双)\s*[)）]|\s*[单双])?""")
+    private val discreteWeeksRegex = Regex("""^第?\s*(\d+(?:\s*[,，、]\s*\d+)+)\s*周?\s*(?:[（(]\s*(单|双)\s*[)）])?\s*周?$""")
 
     fun parse(rawContent: String): List<CourseSchedule> {
         val response = json.decodeFromString<RawScheduleResponse>(rawContent)
-        val rows = response.datas.values
-            .flatMap { it.rows }
+        val rows = response.datas.orEmpty().values
+            .flatMap { it.rows.orEmpty() }
             .distinctBy { row ->
                 listOf(
                     row.courseName.orEmpty(),
@@ -68,17 +74,17 @@ object DoScheduleParser {
     }
 
     private fun splitSegments(text: String): List<String> {
-        val pieces = text.split(",")
+        val pieces = text.split(",", "，", ";", "；", "\n")
         val result = mutableListOf<String>()
         val buffer = StringBuilder()
 
         for (piece in pieces) {
             if (buffer.isNotEmpty()) {
-                buffer.append(',')
+                buffer.append('，')
             }
             buffer.append(piece.trim())
 
-            if (buffer.contains("星期") && buffer.contains("节-第")) {
+            if (buffer.contains("星期") && buffer.contains("节")) {
                 result += buffer.toString().trim()
                 buffer.clear()
             }
@@ -103,8 +109,8 @@ object DoScheduleParser {
 
         return MeetingTime(
             weekday = parseWeekdayFromChinese(weekdayText) ?: return null,
-            startSection = start,
-            endSection = end,
+            startSection = minOf(start, end),
+            endSection = maxOf(start, end),
             weekRules = parseWeekRules(weekExpr),
             location = location
         )
@@ -118,30 +124,64 @@ object DoScheduleParser {
 
         return MeetingTime(
             weekday = weekday,
-            startSection = start,
-            endSection = end,
+            startSection = minOf(start, end),
+            endSection = maxOf(start, end),
             weekRules = parseWeekRules(row.weekText.orEmpty()),
             location = location
         )
     }
 
     private fun parseWeekRules(weekExpr: String): List<WeekRule> {
-        if (weekExpr.isBlank()) {
-            return emptyList()
+        val expr = weekExpr.trim()
+        if (expr.isBlank()) {
+            return listOf(defaultWeekRule(WeekParity.ALL))
         }
 
-        return weekExpr.split(",")
-            .mapNotNull { part ->
-                val match = weekItemRegex.find(part.trim()) ?: return@mapNotNull null
-                val start = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
-                val end = match.groupValues[2].toIntOrNull() ?: start
-                val parity = when (match.groupValues[3]) {
-                    "单" -> WeekParity.ODD
-                    "双" -> WeekParity.EVEN
-                    else -> WeekParity.ALL
-                }
-                WeekRule(start, end, parity)
+        if (!expr.any { it.isDigit() }) {
+            val parity = when {
+                expr.contains("单") -> WeekParity.ODD
+                expr.contains("双") -> WeekParity.EVEN
+                else -> WeekParity.ALL
             }
+            return listOf(defaultWeekRule(parity))
+        }
+
+        discreteWeeksRegex.find(expr)?.let { match ->
+            val parity = when (match.groupValues[2]) {
+                "单" -> WeekParity.ODD
+                "双" -> WeekParity.EVEN
+                else -> WeekParity.ALL
+            }
+            val weeks = match.groupValues[1].split(",", "，", "、")
+                .mapNotNull { it.trim().toIntOrNull() }
+                .filter { it in 1..MAX_WEEK }
+            if (weeks.isNotEmpty()) {
+                return weeks.map { WeekRule(it, it, parity) }
+            }
+        }
+
+        val rules = expr.split(",", "，", "、", ";", "；")
+            .mapNotNull(::parseWeekItem)
+        return rules.ifEmpty { listOf(defaultWeekRule(WeekParity.ALL)) }
+    }
+
+    private fun parseWeekItem(part: String): WeekRule? {
+        val match = weekItemRegex.find(part.trim()) ?: return null
+        val start = match.groupValues[1].toIntOrNull() ?: return null
+        val end = match.groupValues[2].toIntOrNull() ?: start
+        val parity = when (match.groupValues[3]) {
+            "单" -> WeekParity.ODD
+            "双" -> WeekParity.EVEN
+            else -> WeekParity.ALL
+        }
+        if (start !in 1..MAX_WEEK || end !in 1..MAX_WEEK) {
+            return null
+        }
+        return if (start <= end) WeekRule(start, end, parity) else WeekRule(end, start, parity)
+    }
+
+    private fun defaultWeekRule(parity: WeekParity): WeekRule {
+        return WeekRule(1, DEFAULT_TOTAL_WEEKS, parity)
     }
 
     private fun parseWeekdayFromChinese(value: String): Weekday? = when (value) {
@@ -168,16 +208,19 @@ object DoScheduleParser {
 
     private fun JsonElement?.asIntOrNull(): Int? {
         val primitive = this as? JsonPrimitive ?: return null
+        if (primitive is JsonNull) return null
         return primitive.intOrNull ?: primitive.content.trim().toIntOrNull()
     }
 
     private fun JsonElement?.asDoubleOrNull(): Double? {
         val primitive = this as? JsonPrimitive ?: return null
+        if (primitive is JsonNull) return null
         return primitive.doubleOrNull ?: primitive.content.trim().toDoubleOrNull()
     }
 
     private fun JsonElement?.asText(): String {
         val primitive = this as? JsonPrimitive ?: return ""
+        if (primitive is JsonNull) return ""
         return primitive.content
     }
 }

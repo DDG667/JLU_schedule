@@ -38,7 +38,3 @@ data class CourseSchedule(
     val rawWeekText: String,
     val meetings: List<MeetingTime>
 )
-
-data class Timetable(
-    val courses: List<CourseSchedule>
-)

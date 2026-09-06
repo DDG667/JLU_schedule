@@ -6,6 +6,7 @@
     android:importantForAutofill="noExcludeDescendants">
 
     <LinearLayout
+        android:id="@+id/addCoursePanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_add_course_panel"
@@ -16,7 +17,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/manual_course_info"
-                android:textColor="#6A4321"
+                android:textColor="?android:attr/textColorPrimary"
                 android:textSize="13sp"
                 android:textStyle="bold" />
 
@@ -26,7 +27,7 @@
                 android:layout_marginTop="8dp"
                 android:labelFor="@id/inputCourseName"
                 android:text="@string/manual_course_name"
-                android:textColor="#7A5732"
+                android:textColor="?android:attr/textColorSecondary"
                 android:textSize="12sp" />
 
             <EditText
@@ -38,8 +39,8 @@
                 android:inputType="textCapWords"
                 android:paddingStart="10dp"
                 android:paddingEnd="10dp"
-                android:textColor="#4A321C"
-                android:textColorHint="#8C7A64" />
+                android:textColor="?android:attr/textColorPrimary"
+                android:textColorHint="?android:attr/textColorHint" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -47,7 +48,7 @@
                 android:layout_marginTop="8dp"
                 android:labelFor="@id/inputTeacher"
                 android:text="@string/manual_teacher_optional"
-                android:textColor="#7A5732"
+                android:textColor="?android:attr/textColorSecondary"
                 android:textSize="12sp" />
 
             <EditText
@@ -59,8 +60,8 @@
                 android:inputType="textPersonName"
                 android:paddingStart="10dp"
                 android:paddingEnd="10dp"
-                android:textColor="#4A321C"
-                android:textColorHint="#8C7A64" />
+                android:textColor="?android:attr/textColorPrimary"
+                android:textColorHint="?android:attr/textColorHint" />
 
             <TextView
                 android:layout_width="match_parent"
@@ -68,7 +69,7 @@
                 android:layout_marginTop="8dp"
                 android:labelFor="@id/inputLocation"
                 android:text="@string/manual_location_optional"
-                android:textColor="#7A5732"
+                android:textColor="?android:attr/textColorSecondary"
                 android:textSize="12sp" />
 
             <EditText
@@ -80,15 +81,15 @@
                 android:inputType="text"
                 android:paddingStart="10dp"
                 android:paddingEnd="10dp"
-                android:textColor="#4A321C"
-                android:textColorHint="#8C7A64" />
+                android:textColor="?android:attr/textColorPrimary"
+                android:textColorHint="?android:attr/textColorHint" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:text="@string/manual_time_info"
-                android:textColor="#6A4321"
+                android:textColor="?android:attr/textColorPrimary"
                 android:textSize="13sp"
                 android:textStyle="bold" />
 
@@ -97,7 +98,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="@string/manual_weekday"
-                android:textColor="#7A5732"
+                android:textColor="?android:attr/textColorSecondary"
                 android:textSize="12sp" />
 
             <Spinner
@@ -119,7 +120,7 @@
                     android:layout_weight="1"
                     android:labelFor="@id/inputStartSection"
                     android:text="@string/manual_start_section"
-                    android:textColor="#7A5732"
+                    android:textColor="?android:attr/textColorSecondary"
                     android:textSize="12sp" />
 
                 <TextView
@@ -129,7 +130,7 @@
                     android:layout_weight="1"
                     android:labelFor="@id/inputEndSection"
                     android:text="@string/manual_end_section"
-                    android:textColor="#7A5732"
+                    android:textColor="?android:attr/textColorSecondary"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -148,8 +149,8 @@
                     android:inputType="number"
                     android:paddingStart="10dp"
                     android:paddingEnd="10dp"
-                    android:textColor="#4A321C"
-                    android:textColorHint="#8C7A64" />
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textColorHint="?android:attr/textColorHint" />
 
                 <EditText
                     android:id="@+id/inputEndSection"
@@ -161,8 +162,8 @@
                     android:inputType="number"
                     android:paddingStart="10dp"
                     android:paddingEnd="10dp"
-                    android:textColor="#4A321C"
-                    android:textColorHint="#8C7A64" />
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textColorHint="?android:attr/textColorHint" />
             </LinearLayout>
 
             <LinearLayout
@@ -177,7 +178,7 @@
                     android:layout_weight="1"
                     android:labelFor="@id/inputStartWeek"
                     android:text="@string/manual_start_week"
-                    android:textColor="#7A5732"
+                    android:textColor="?android:attr/textColorSecondary"
                     android:textSize="12sp" />
 
                 <TextView
@@ -187,7 +188,7 @@
                     android:layout_weight="1"
                     android:labelFor="@id/inputEndWeek"
                     android:text="@string/manual_end_week"
-                    android:textColor="#7A5732"
+                    android:textColor="?android:attr/textColorSecondary"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -206,8 +207,8 @@
                     android:inputType="number"
                     android:paddingStart="10dp"
                     android:paddingEnd="10dp"
-                    android:textColor="#4A321C"
-                    android:textColorHint="#8C7A64" />
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textColorHint="?android:attr/textColorHint" />
 
                 <EditText
                     android:id="@+id/inputEndWeek"
@@ -219,8 +220,8 @@
                     android:inputType="number"
                     android:paddingStart="10dp"
                     android:paddingEnd="10dp"
-                    android:textColor="#4A321C"
-                    android:textColorHint="#8C7A64" />
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textColorHint="?android:attr/textColorHint" />
             </LinearLayout>
 
             <TextView
@@ -228,7 +229,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="@string/manual_parity_rule"
-                android:textColor="#7A5732"
+                android:textColor="?android:attr/textColorSecondary"
                 android:textSize="12sp" />
 
             <RadioGroup
@@ -244,7 +245,7 @@
                     android:layout_height="wrap_content"
                     android:checked="true"
                     android:text="@string/manual_parity_all"
-                    android:textColor="#5A3D1F" />
+                    android:textColor="?android:attr/textColorPrimary" />
 
                 <RadioButton
                     android:id="@+id/parityOdd"
@@ -252,7 +253,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
                     android:text="@string/manual_parity_odd"
-                    android:textColor="#5A3D1F" />
+                    android:textColor="?android:attr/textColorPrimary" />
 
                 <RadioButton
                     android:id="@+id/parityEven"
@@ -260,7 +261,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
                     android:text="@string/manual_parity_even"
-                    android:textColor="#5A3D1F" />
+                    android:textColor="?android:attr/textColorPrimary" />
             </RadioGroup>
 
             <LinearLayout
@@ -276,10 +277,9 @@
                     style="?android:attr/buttonBarButtonStyle"
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
-                    android:background="#33FFFFFF"
                     android:text="@string/action_cancel"
                     android:textAllCaps="false"
-                    android:textColor="#5A3D1F" />
+                    android:textColor="?android:attr/textColorPrimary" />
 
                 <Button
                     android:id="@+id/saveManualAddButton"
@@ -287,10 +287,9 @@
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
                     android:layout_marginStart="8dp"
-                    android:background="#EFD7B1"
                     android:text="@string/action_save"
                     android:textAllCaps="false"
-                    android:textColor="#4A321C" />
+                    android:textColor="?android:attr/textColorPrimary" />
             </LinearLayout>
 
     </LinearLayout>

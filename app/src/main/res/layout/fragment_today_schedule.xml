@@ -9,11 +9,11 @@
         android:id="@+id/todayContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#44FFF2DA"
         android:orientation="vertical"
         android:padding="12dp">
 
         <LinearLayout
+            android:id="@+id/todaySummaryCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="#55FFFFFF"
@@ -24,7 +24,7 @@
                 android:id="@+id/todayTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textColor="#5A3D1F"
+                android:textColor="?android:attr/textColorPrimary"
                 android:textSize="20sp"
                 android:textStyle="bold" />
 

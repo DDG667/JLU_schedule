@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.content.res.ColorStateList
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -19,37 +20,28 @@ import android.widget.TextView
 import android.widget.Button
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.core.graphics.ColorUtils
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.widget.ViewPager2
 import cn.jlu.schedule.R
 import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.data.ImportedScheduleStorage
-import cn.jlu.schedule.domain.WeekScheduleCalculator
+import cn.jlu.schedule.data.ScheduleRepository
+import cn.jlu.schedule.domain.SectionTimes
 import cn.jlu.schedule.model.WeekParity
 import cn.jlu.schedule.model.Weekday
 import cn.jlu.schedule.ui.importer.ImportBrowserActivity
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 import cn.jlu.schedule.ui.theme.UiFeedback
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 class TimetableFragment : Fragment() {
-    private val periodTimeRanges = listOf(
-        "08:00-08:45",
-        "08:45-09:40",
-        "10:00-10:45",
-        "10:45-11:40",
-        "13:30-14:15",
-        "14:15-15:10",
-        "15:30-16:15",
-        "16:15-17:10",
-        "18:20-19:05",
-        "19:05-19:50",
-        "20:00-20:45",
-        "20:45-21:30"
-    )
-
     private val weekdayLabels = mapOf(
         Weekday.MONDAY to "一",
         Weekday.TUESDAY to "二",
@@ -79,10 +71,8 @@ class TimetableFragment : Fragment() {
     private var currentWeekIndex: Int = 1
     private var pageChangeCallback: ViewPager2.OnPageChangeCallback? = null
     private var pageChangeRegistered: Boolean = false
-    private val importLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            refreshTimetable()
-        }
+    private val importLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
+        // 数据变化由 ScheduleRepository 状态流驱动
     }
 
     override fun onCreateView(
@@ -105,7 +95,7 @@ class TimetableFragment : Fragment() {
         addCourseButton.imageTintList = ColorStateList.valueOf(palette.iconTint)
         importScheduleButton.imageTintList = ColorStateList.valueOf(palette.iconTint)
 
-        refreshTimetable()
+        observeTimetable()
 
         importScheduleButton.setOnClickListener {
             showImportSourceDialog()
@@ -118,7 +108,7 @@ class TimetableFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        refreshTimetable()
+        ScheduleRepository.refresh(requireContext())
     }
 
     override fun onDestroyView() {
@@ -132,7 +122,19 @@ class TimetableFragment : Fragment() {
         super.onDestroyView()
     }
 
-    private fun refreshTimetable() {
+    private fun observeTimetable() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                ScheduleRepository.timetable.collect { data ->
+                    if (data != null) {
+                        renderTimetable(data)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun renderTimetable(data: ScheduleRepository.TimetableUiData) {
         if (!isAdded || view == null) {
             return
         }
@@ -144,43 +146,44 @@ class TimetableFragment : Fragment() {
             }
         }
 
-        val courses = runCatching { ImportedScheduleStorage.loadCoursesOrSampleAsset(ctx, "sample_schedule.do") }
-            .getOrElse { emptyList() }
-        val semesterStart = ImportedScheduleStorage.getActiveSemesterStartDate(ctx)
         val fontScale = AppPreferences.getTimetableFontScale(ctx)
-        val theme = AppPreferences.getThemeColor(ctx)
+        val palette = ThemePaletteProvider.fromContext(ctx)
         val hasCustomBackground = !AppPreferences.getCustomBackgroundUri(ctx).isNullOrBlank()
         val showNonCurrent = AppPreferences.isShowNonCurrentCourses(ctx)
 
-        val totalWeeks = WeekScheduleCalculator.totalWeeks(courses)
-        currentWeekIndex = guessCurrentWeek(totalWeeks, semesterStart)
+        currentWeekIndex = data.currentWeek
         val today = LocalDate.now()
-        val currentSection = WeekTimetableRenderer.resolveCurrentSection(periodTimeRanges)
+        val currentSection = WeekTimetableRenderer.resolveCurrentSection(SectionTimes.DEFAULT_RANGES)
         val adapter = WeekPagerAdapter(
-            courses = courses,
-            totalWeeks = totalWeeks,
-            periodRanges = periodTimeRanges,
+            courses = data.courses,
+            totalWeeks = data.totalWeeks,
+            periodRanges = SectionTimes.DEFAULT_RANGES,
             weekdayLabels = weekdayLabels,
             cardColors = cardColors,
             today = today,
             currentSection = currentSection,
-            semesterStart = semesterStart,
+            semesterStart = data.semesterStart,
             baseWeek = currentWeekIndex,
             showNonCurrent = showNonCurrent,
             fontScale = fontScale,
-            theme = theme,
+            palette = palette,
             hasCustomBackground = hasCustomBackground,
             onCourseClick = { item ->
                 if (isAdded && !parentFragmentManager.isStateSaved) {
                     runCatching {
-                        CourseDetailBottomSheet.show(requireContext(), item, periodTimeRanges)
+                        CourseDetailBottomSheet.show(requireContext(), item, SectionTimes.DEFAULT_RANGES)
                     }
                 }
             }
         )
+        // 保留用户当前浏览的周，避免数据刷新时被强制跳回本周
+        val previousPosition = weekPager.adapter?.let { weekPager.currentItem } ?: -1
         weekPager.adapter = adapter
-
-        weekPager.setCurrentItem(currentWeekIndex - 1, false)
+        if (previousPosition >= 0) {
+            weekPager.setCurrentItem(previousPosition.coerceAtMost(data.totalWeeks - 1), false)
+        } else {
+            weekPager.setCurrentItem(currentWeekIndex - 1, false)
+        }
         updateHeader(currentWeekIndex)
 
         val callback = object : ViewPager2.OnPageChangeCallback() {
@@ -267,6 +270,26 @@ class TimetableFragment : Fragment() {
         val endWeekInput = formView.findViewById<EditText>(R.id.inputEndWeek)
         val parityGroup = formView.findViewById<RadioGroup>(R.id.inputParityGroup)
 
+        // 面板与输入框按当前主题着色
+        val dialogPalette = ThemePaletteProvider.fromContext(ctx)
+        formView.findViewById<LinearLayout>(R.id.addCoursePanel).background =
+            GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 20f
+                setColor(dialogPalette.panelAltBackground)
+                setStroke(2, ColorUtils.blendARGB(dialogPalette.panelAltBackground, dialogPalette.iconTint, 0.22f))
+            }
+        val inputBackground = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 10f
+            setColor(dialogPalette.panelBackground)
+            setStroke(2, ColorUtils.blendARGB(dialogPalette.panelBackground, dialogPalette.iconTint, 0.18f))
+        }
+        listOf(
+            nameInput, teacherInput, locationInput,
+            startSectionInput, endSectionInput, startWeekInput, endWeekInput, weekdaySpinner
+        ).forEach { it.background = inputBackground }
+
         val weekdayItems = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
         weekdaySpinner.adapter = ArrayAdapter(ctx, android.R.layout.simple_spinner_dropdown_item, weekdayItems)
 
@@ -285,6 +308,8 @@ class TimetableFragment : Fragment() {
 
         dialog.setOnShowListener {
             dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            UiFeedback.styleSecondaryButton(cancelButton, dialogPalette)
+            UiFeedback.stylePrimaryButton(saveButton, dialogPalette)
         }
 
         cancelButton.setOnClickListener {
@@ -350,23 +375,31 @@ class TimetableFragment : Fragment() {
                 else -> WeekParity.ALL
             }
 
-            ImportedScheduleStorage.addManualCourseToActive(
-                ctx,
-                ImportedScheduleStorage.ManualCourseInput(
-                    courseName = name,
-                    teacher = teacher,
-                    location = location,
-                    weekday = weekday,
-                    startSection = startSection,
-                    endSection = endSection,
-                    startWeek = startWeek,
-                    endWeek = endWeek,
-                    parity = parity
+            // 防抖：保存开始后立即禁用按钮，避免双击重复添加
+            saveButton.isEnabled = false
+            viewLifecycleOwner.lifecycleScope.launch {
+                val result = ScheduleRepository.addManualCourse(
+                    ctx,
+                    ImportedScheduleStorage.ManualCourseInput(
+                        courseName = name,
+                        teacher = teacher,
+                        location = location,
+                        weekday = weekday,
+                        startSection = startSection,
+                        endSection = endSection,
+                        startWeek = startWeek,
+                        endWeek = endWeek,
+                        parity = parity
+                    )
                 )
-            )
-            UiFeedback.showMessage(view, "已添加到当前课表", ThemePaletteProvider.fromContext(ctx))
-            dialog.dismiss()
-            activity?.recreate()
+                result.onSuccess {
+                    UiFeedback.showMessage(view, "已添加到当前课表", ThemePaletteProvider.fromContext(ctx))
+                    dialog.dismiss()
+                }.onFailure { error ->
+                    saveButton.isEnabled = true
+                    UiFeedback.showMessage(view, error.message ?: "添加失败", ThemePaletteProvider.fromContext(ctx))
+                }
+            }
         }
         dialog.show()
     }
@@ -386,13 +419,6 @@ class TimetableFragment : Fragment() {
         }
         input.error = null
         return value
-    }
-
-    private fun guessCurrentWeek(totalWeeks: Int, semesterStart: LocalDate): Int {
-        val now = LocalDate.now()
-        val days = java.time.temporal.ChronoUnit.DAYS.between(semesterStart, now).toInt()
-        val computed = days / 7 + 1
-        return computed.coerceIn(1, totalWeeks)
     }
 
     private fun weekdayFromJava(dayValue: Int): Weekday {

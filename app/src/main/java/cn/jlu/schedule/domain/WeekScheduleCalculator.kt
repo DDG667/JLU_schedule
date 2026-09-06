@@ -3,6 +3,8 @@ package cn.jlu.schedule.domain
 import cn.jlu.schedule.model.CourseSchedule
 import cn.jlu.schedule.model.MeetingTime
 import cn.jlu.schedule.model.WeekParity
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 object WeekScheduleCalculator {
     fun totalWeeks(courses: List<CourseSchedule>): Int {
@@ -11,6 +13,12 @@ object WeekScheduleCalculator {
             .flatMap { it.weekRules }
             .maxOfOrNull { it.endWeek }
         return (maxWeek ?: 20).coerceAtLeast(1)
+    }
+
+    fun guessCurrentWeek(semesterStart: LocalDate, today: LocalDate, totalWeeks: Int): Int {
+        val days = ChronoUnit.DAYS.between(semesterStart, today)
+        val week = Math.floorDiv(days, 7L).toInt() + 1
+        return week.coerceIn(1, totalWeeks.coerceAtLeast(1))
     }
 
     fun meetingsForWeek(courses: List<CourseSchedule>, week: Int): List<CourseMeetingRef> {
@@ -27,7 +35,8 @@ object WeekScheduleCalculator {
         baseWeek: Int,
         showNonCurrent: Boolean
     ): List<CourseMeetingDisplayRef> {
-        val referenceWeek = maxOf(baseWeek, week)
+        // 以被查看的周为参考点，历史周才能看到当时真实存在（含已结课）的课程
+        val referenceWeek = week
         return courses.flatMapIndexed { index, course ->
             course.meetings.mapNotNull { meeting ->
                 val isCurrentWeek = isMeetingActiveInWeek(meeting, week)

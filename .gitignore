@@ -12,6 +12,24 @@ local.properties
 # IDE files
 .idea/
 *.iml
+.zcode/
+
+# iOS / Xcode
+ios/Pods/
+ios/**/*.xcuserdatad/
+ios/DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# HarmonyOS / DevEco
+harmonyos/.hvigor/
+harmonyos/oh_modules/
+harmonyos/entry/build/
+harmonyos/entry/oh_modules/
+harmonyos/build/
+harmonyos/verify/.verify_tmp/
+harmonyos/local.properties
+**/.preview/
 
 # VS Code temp
 .vscode/.ropeproject/

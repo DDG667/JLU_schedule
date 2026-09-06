@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@android:color/transparent">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -13,236 +14,301 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/settings_title"
-            android:textColor="#5A3D1F"
-            android:textSize="20sp"
-            android:textStyle="bold" />
+            android:textColor="?android:attr/textColorPrimary"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="12dp" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/settings_timetable_manage"
-            android:textColor="#7A5A37"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/manageTimetableButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/settings_open_timetable_manage"
-            android:textAllCaps="false" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/settings_default_page"
-            android:textColor="#7A5A37"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <RadioGroup
-            android:id="@+id/defaultOpenGroup"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="vertical">
-
-            <RadioButton
-                android:id="@+id/defaultOpenTimetable"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/nav_timetable"
-                android:textColor="#5A3D1F"
-                android:textSize="14sp" />
-
-            <RadioButton
-                android:id="@+id/defaultOpenToday"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/nav_today"
-                android:textColor="#5A3D1F"
-                android:textSize="14sp" />
-        </RadioGroup>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/settings_semester_start"
-            android:textColor="#7A5A37"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
+        <!-- 课表管理 -->
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:id="@+id/settingsCardTimetable"
+            style="@style/SettingsCard">
+
+            <LinearLayout style="@style/SettingsCardHeader">
+                <ImageView
+                    android:id="@+id/iconTimetable"
+                    style="@style/SettingsCardIcon"
+                    android:src="@drawable/ic_settings_calendar"
+                    android:contentDescription="@null" />
+                <TextView
+                    style="@style/SettingsCardTitle"
+                    android:text="@string/settings_timetable_manage" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowManageTimetable"
+                style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_open_timetable_manage" />
+                <ImageView style="@style/SettingsRowChevron" android:contentDescription="@null" />
+            </LinearLayout>
+
+            <View
+                android:id="@+id/dividerTimetable"
+                style="@style/SettingsDivider" />
+
+            <LinearLayout
+                android:id="@+id/rowSemesterStart"
+                style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_row_first_week" />
+                <TextView
+                    android:id="@+id/semesterStartDateText"
+                    style="@style/SettingsRowValue" />
+                <ImageView style="@style/SettingsRowChevron" android:contentDescription="@null" />
+            </LinearLayout>
+
+            <View style="@style/SettingsDivider" />
+
+            <LinearLayout style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_row_default_open" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/defaultOpenGroup"
+                style="@style/SettingsSegment">
+                <TextView
+                    android:id="@+id/defaultOpenTimetable"
+                    style="@style/SettingsSegmentButton"
+                    android:text="@string/nav_timetable" />
+                <TextView
+                    android:id="@+id/defaultOpenToday"
+                    style="@style/SettingsSegmentButton"
+                    android:text="@string/nav_today" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 外观 -->
+        <LinearLayout
+            android:id="@+id/settingsCardAppearance"
+            style="@style/SettingsCard">
+
+            <LinearLayout style="@style/SettingsCardHeader">
+                <ImageView
+                    android:id="@+id/iconAppearance"
+                    style="@style/SettingsCardIcon"
+                    android:src="@drawable/ic_settings_palette"
+                    android:contentDescription="@null" />
+                <TextView
+                    style="@style/SettingsCardTitle"
+                    android:text="@string/settings_appearance" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_theme" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/themeGroup"
+                style="@style/SettingsSegment">
+                <TextView
+                    android:id="@+id/themeWarm"
+                    style="@style/SettingsSegmentButton"
+                    android:text="@string/settings_theme_warm" />
+                <TextView
+                    android:id="@+id/themeOcean"
+                    style="@style/SettingsSegmentButton"
+                    android:text="@string/settings_theme_ocean" />
+                <TextView
+                    android:id="@+id/themeMint"
+                    style="@style/SettingsSegmentButton"
+                    android:text="@string/settings_theme_mint" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_dark_mode" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/darkModeGroup"
+                style="@style/SettingsSegment">
+                <TextView
+                    android:id="@+id/darkModeSystem"
+                    style="@style/SettingsSegmentButton"
+                    android:text="@string/settings_dark_follow_system" />
+                <TextView
+                    android:id="@+id/darkModeLight"
+                    style="@style/SettingsSegmentButton"
+                    android:text="@string/settings_dark_light" />
+                <TextView
+                    android:id="@+id/darkModeDark"
+                    style="@style/SettingsSegmentButton"
+                    android:text="@string/settings_dark_dark" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_font_scale" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/fontScaleGroup"
+                style="@style/SettingsSegment">
+                <TextView
+                    android:id="@+id/fontSmall"
+                    style="@style/SettingsSegmentButton"
+                    android:text="@string/settings_font_small" />
+                <TextView
+                    android:id="@+id/fontNormal"
+                    style="@style/SettingsSegmentButton"
+                    android:text="@string/settings_font_normal" />
+                <TextView
+                    android:id="@+id/fontLarge"
+                    style="@style/SettingsSegmentButton"
+                    android:text="@string/settings_font_large" />
+            </LinearLayout>
+
+            <View
+                android:id="@+id/dividerAppearance"
+                style="@style/SettingsDivider" />
+
+            <LinearLayout style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_show_non_current" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/showNonCurrentSwitch"
+                    style="@style/SettingsRowSwitch" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 上课提醒 -->
+        <LinearLayout
+            android:id="@+id/settingsCardReminder"
+            style="@style/SettingsCard">
+
+            <LinearLayout style="@style/SettingsCardHeader">
+                <ImageView
+                    android:id="@+id/iconReminder"
+                    style="@style/SettingsCardIcon"
+                    android:src="@drawable/ic_settings_bell"
+                    android:contentDescription="@null" />
+                <TextView
+                    style="@style/SettingsCardTitle"
+                    android:text="@string/settings_reminder" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_reminder_enable" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/reminderSwitch"
+                    style="@style/SettingsRowSwitch" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowReminderTime"
+                style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_row_reminder_time" />
+                <TextView
+                    android:id="@+id/reminderTimeText"
+                    style="@style/SettingsRowValue" />
+                <ImageView style="@style/SettingsRowChevron" android:contentDescription="@null" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 自定义背景 -->
+        <LinearLayout
+            android:id="@+id/settingsCardBackground"
+            style="@style/SettingsCard">
+
+            <LinearLayout style="@style/SettingsCardHeader">
+                <ImageView
+                    android:id="@+id/iconBackground"
+                    style="@style/SettingsCardIcon"
+                    android:src="@drawable/ic_settings_wallpaper"
+                    android:contentDescription="@null" />
+                <TextView
+                    style="@style/SettingsCardTitle"
+                    android:text="@string/settings_custom_background" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowChooseBackground"
+                style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_choose_crop" />
+                <ImageView style="@style/SettingsRowChevron" android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowClearBackground"
+                style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_restore_default" />
+                <ImageView style="@style/SettingsRowChevron" android:contentDescription="@null" />
+            </LinearLayout>
 
             <TextView
-                android:id="@+id/semesterStartDateText"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textColor="#5A3D1F"
-                android:textSize="14sp" />
-
-            <Button
-                android:id="@+id/changeSemesterStartButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/settings_change"
-                android:textAllCaps="false" />
+                style="@style/SettingsCardHint"
+                android:text="@string/settings_background_hint" />
         </LinearLayout>
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/settings_theme"
-            android:textColor="#7A5A37"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <RadioGroup
-            android:id="@+id/themeGroup"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="vertical">
-
-            <RadioButton
-                android:id="@+id/themeWarm"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/settings_theme_warm"
-                android:textColor="#5A3D1F"
-                android:textSize="14sp" />
-
-            <RadioButton
-                android:id="@+id/themeOcean"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/settings_theme_ocean"
-                android:textColor="#5A3D1F"
-                android:textSize="14sp" />
-
-            <RadioButton
-                android:id="@+id/themeMint"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/settings_theme_mint"
-                android:textColor="#5A3D1F"
-                android:textSize="14sp" />
-        </RadioGroup>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/settings_font_scale"
-            android:textColor="#7A5A37"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <RadioGroup
-            android:id="@+id/fontScaleGroup"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="vertical">
-
-            <RadioButton
-                android:id="@+id/fontSmall"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/settings_font_small"
-                android:textColor="#5A3D1F"
-                android:textSize="14sp" />
-
-            <RadioButton
-                android:id="@+id/fontNormal"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/settings_font_normal"
-                android:textColor="#5A3D1F"
-                android:textSize="14sp" />
-
-            <RadioButton
-                android:id="@+id/fontLarge"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/settings_font_large"
-                android:textColor="#5A3D1F"
-                android:textSize="14sp" />
-        </RadioGroup>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/settings_non_current"
-            android:textColor="#7A5A37"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/showNonCurrentSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/settings_show_non_current"
-            android:textColor="#5A3D1F"
-            android:textSize="14sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/settings_custom_background"
-            android:textColor="#7A5A37"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
+        <!-- 数据管理 -->
         <LinearLayout
-            style="?android:attr/buttonBarStyle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="horizontal">
+            android:id="@+id/settingsCardData"
+            style="@style/SettingsCard">
 
-            <Button
-                android:id="@+id/chooseBackgroundButton"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/settings_choose_crop"
-                android:textAllCaps="false" />
+            <LinearLayout style="@style/SettingsCardHeader">
+                <ImageView
+                    android:id="@+id/iconData"
+                    style="@style/SettingsCardIcon"
+                    android:src="@drawable/ic_settings_folder"
+                    android:contentDescription="@null" />
+                <TextView
+                    style="@style/SettingsCardTitle"
+                    android:text="@string/settings_data" />
+            </LinearLayout>
 
-            <Button
-                android:id="@+id/clearBackgroundButton"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
-                android:layout_weight="1"
-                android:text="@string/settings_restore_default"
-                android:textAllCaps="false" />
+            <LinearLayout
+                android:id="@+id/rowExportText"
+                style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_export_text" />
+                <ImageView style="@style/SettingsRowChevron" android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowBackup"
+                style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_backup" />
+                <ImageView style="@style/SettingsRowChevron" android:contentDescription="@null" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowRestore"
+                style="@style/SettingsRow">
+                <TextView
+                    style="@style/SettingsRowLabel"
+                    android:text="@string/settings_restore" />
+                <ImageView style="@style/SettingsRowChevron" android:contentDescription="@null" />
+            </LinearLayout>
         </LinearLayout>
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/settings_background_hint"
-            android:textColor="#7A5A37"
-            android:textSize="13sp" />
-
+            android:gravity="center"
+            android:text="JLU Schedule 1.2.0"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="12sp"
+            android:layout_marginTop="8dp" />
     </LinearLayout>
-
 </ScrollView>

@@ -19,15 +19,22 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.TextViewCompat
+import androidx.lifecycle.lifecycleScope
 import cn.jlu.schedule.R
+import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.data.ImportedScheduleStorage
+import cn.jlu.schedule.data.ScheduleRepository
 import cn.jlu.schedule.parser.ScheduleImportCacheParser
 import cn.jlu.schedule.ui.theme.ThemePalette
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 import cn.jlu.schedule.ui.theme.UiFeedback
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -38,17 +45,19 @@ import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import javax.net.ssl.HttpsURLConnection
-import kotlin.concurrent.thread
 
 class ImportBrowserActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var urlInput: EditText
     private lateinit var pageProgress: ProgressBar
     private lateinit var captureStatusText: TextView
+    private lateinit var importButton: Button
 
     private val ioExecutor = Executors.newFixedThreadPool(2)
+    private val importInProgress = AtomicBoolean(false)
 
     private lateinit var cacheSessionDir: File
     private val cacheEntries = Collections.synchronizedList(mutableListOf<CachedFileEntry>())
@@ -58,9 +67,22 @@ class ImportBrowserActivity : AppCompatActivity() {
     private val cacheWriteMonitor = Object()
     private var cachedUserAgent: String = "Mozilla/5.0"
     private val trustedSslHosts = Collections.synchronizedSet(mutableSetOf<String>())
+    private val pendingSslHandlers = LinkedHashMap<String, MutableList<SslErrorHandler>>()
     private lateinit var palette: ThemePalette
 
+    private fun resolveSslHandlers(host: String, proceed: Boolean) {
+        val handlers = synchronized(pendingSslHandlers) { pendingSslHandlers.remove(host) }
+        if (proceed) {
+            trustedSslHosts.add(host)
+        }
+        handlers?.forEach { handler ->
+            runCatching { if (proceed) handler.proceed() else handler.cancel() }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        ThemePaletteProvider.applyNightMode(this)
+        setTheme(ThemePaletteProvider.themeStyleFor(AppPreferences.getThemeColor(this)))
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_import_browser)
 
@@ -69,13 +91,22 @@ class ImportBrowserActivity : AppCompatActivity() {
         urlInput = findViewById(R.id.urlInput)
         pageProgress = findViewById(R.id.pageProgress)
         captureStatusText = findViewById(R.id.captureStatusText)
+        importButton = findViewById(R.id.importFromHereButton)
         val goButton = findViewById<Button>(R.id.goButton)
-        val importButton = findViewById<Button>(R.id.importFromHereButton)
 
         initCacheSessionDir()
         setupWebView()
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (webView.canGoBack()) {
+                    webView.goBack()
+                } else {
+                    finish()
+                }
+            }
+        })
         palette = ThemePaletteProvider.fromContext(this)
-        applyTheme(goButton, importButton)
+        applyTheme(goButton)
         updateCaptureStatus()
 
         val assetFileName = intent.getStringExtra(EXTRA_URL_ASSET).orEmpty()
@@ -98,7 +129,7 @@ class ImportBrowserActivity : AppCompatActivity() {
         UiFeedback.showMessage(findViewById(android.R.id.content), "先进入到“我的课程”页面，再点从此处导入", palette)
     }
 
-    private fun applyTheme(goButton: Button, importButton: Button) {
+    private fun applyTheme(goButton: Button) {
         val palette = ThemePaletteProvider.fromContext(this)
         goButton.setBackgroundColor(palette.buttonBackground)
         goButton.setTextColor(palette.buttonText)
@@ -114,6 +145,9 @@ class ImportBrowserActivity : AppCompatActivity() {
         if (!root.exists()) {
             root.mkdirs()
         }
+        // 导入只使用本次会话捕获的缓存，历史 session 目录是孤儿数据，启动时清理
+        root.listFiles { file -> file.isDirectory && file.name.startsWith("session_") }
+            ?.forEach { stale -> runCatching { stale.deleteRecursively() } }
         cacheSessionDir = File(root, "session_${System.currentTimeMillis()}")
         cacheSessionDir.mkdirs()
     }
@@ -175,29 +209,42 @@ class ImportBrowserActivity : AppCompatActivity() {
 
             @SuppressLint("WebViewClientOnReceivedSslError")
             override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+                val safeHandler = handler ?: return
                 val host = runCatching { Uri.parse(error?.url.orEmpty()).host.orEmpty().lowercase(Locale.ROOT) }
                     .getOrDefault("")
-                if (host.isBlank()) {
-                    handler?.cancel()
+                if (host.isBlank() || isDestroyed || isFinishing) {
+                    safeHandler.cancel()
                     return
                 }
 
-                if (trustedSslHosts.contains(host) || AUTO_TRUST_SSL_HOSTS.contains(host)) {
-                    trustedSslHosts.add(host)
-                    handler?.proceed()
+                // 本会话内用户已确认过的主机直接放行
+                if (trustedSslHosts.contains(host)) {
+                    safeHandler.proceed()
+                    return
+                }
+
+                // 同一主机同时报错时聚合到一个对话框，由用户逐主机确认
+                val alreadyPending = synchronized(pendingSslHandlers) {
+                    val existing = pendingSslHandlers[host]
+                    if (existing != null) {
+                        existing.add(safeHandler)
+                    } else {
+                        pendingSslHandlers[host] = mutableListOf(safeHandler)
+                    }
+                    existing != null
+                }
+                if (alreadyPending) {
                     return
                 }
 
                 AlertDialog.Builder(this@ImportBrowserActivity)
                     .setTitle("证书校验提醒")
-                    .setMessage("当前站点证书校验失败：$host\n是否继续访问？")
-                    .setPositiveButton("继续") { _, _ ->
-                        trustedSslHosts.add(host)
-                        handler?.proceed()
-                    }
-                    .setNegativeButton("取消") { _, _ ->
-                        handler?.cancel()
-                    }
+                    .setMessage(
+                        "当前站点证书校验失败：$host\n是否继续访问？\n\n" +
+                            "继续访问存在被窃听的风险，请确认你正在使用校内网或学校官方 VPN 入口。"
+                    )
+                    .setPositiveButton("继续") { _, _ -> resolveSslHandlers(host, proceed = true) }
+                    .setNegativeButton("取消") { _, _ -> resolveSslHandlers(host, proceed = false) }
                     .setCancelable(false)
                     .create()
                     .also { dialog ->
@@ -309,22 +356,24 @@ class ImportBrowserActivity : AppCompatActivity() {
         }
 
         var total = 0
+        var truncated = false
         BufferedInputStream(input).use { ins ->
             FileOutputStream(file).use { out ->
                 val buffer = ByteArray(16 * 1024)
-                while (true) {
+                while (!truncated) {
                     val read = ins.read(buffer)
                     if (read <= 0) break
                     total += read
                     if (total > MAX_CACHE_FILE_BYTES) {
-                        return null
+                        truncated = true
+                    } else {
+                        out.write(buffer, 0, read)
                     }
-                    out.write(buffer, 0, read)
                 }
             }
         }
 
-        if (total <= 0) {
+        if (truncated || total <= 0) {
             runCatching { file.delete() }
             return null
         }
@@ -343,6 +392,13 @@ class ImportBrowserActivity : AppCompatActivity() {
     }
 
     private fun chooseImportModeAndImport() {
+        // 防抖：导入进行中忽略重复点击
+        if (!importInProgress.compareAndSet(false, true)) {
+            UiFeedback.showMessage(findViewById(android.R.id.content), "正在导入中，请稍候", palette)
+            return
+        }
+        importButton.isEnabled = false
+
         val modeItems = arrayOf("覆盖当前课表", "新建课表")
         AlertDialog.Builder(this)
             .setTitle("导入方式")
@@ -365,6 +421,7 @@ class ImportBrowserActivity : AppCompatActivity() {
                             )
                         }
                         .setNegativeButton("取消", null)
+                        .setOnCancelListener { releaseImportLock() }
                         .create()
                         .also { dialog ->
                             dialog.show()
@@ -373,6 +430,7 @@ class ImportBrowserActivity : AppCompatActivity() {
                 }
             }
             .setNegativeButton("取消", null)
+            .setOnCancelListener { releaseImportLock() }
             .create()
             .also { dialog ->
                 dialog.show()
@@ -380,10 +438,15 @@ class ImportBrowserActivity : AppCompatActivity() {
             }
     }
 
+    private fun releaseImportLock() {
+        importInProgress.set(false)
+        importButton.isEnabled = true
+    }
+
     private fun importFromCachedFiles(mode: ImportedScheduleStorage.ImportMode, newProfileName: String?) {
         UiFeedback.showMessage(findViewById(android.R.id.content), "正在从本地缓存检索课表文件...", palette)
 
-        thread {
+        lifecycleScope.launch(Dispatchers.IO) {
             waitForCacheWritesToSettle()
             val snapshot = synchronized(cacheEntries) { cacheEntries.toList() }
             val parseResult = ScheduleImportCacheParser.parse(snapshot.map { it.toParserEntry() })
@@ -395,10 +458,27 @@ class ImportBrowserActivity : AppCompatActivity() {
                     )
                 }
             }
-            runOnUiThread {
+
+            val saveResult = if (parseResult.courses.isEmpty()) {
+                null
+            } else {
+                ScheduleRepository.importParsedCourses(
+                    this@ImportBrowserActivity,
+                    courses = parseResult.courses,
+                    mode = mode,
+                    newProfileName = newProfileName?.ifBlank { null },
+                    semesterStartDate = parseResult.inferredSemesterStartDate
+                ).onFailure { Log.w(TAG, "Writing imported courses failed", it) }
+            }
+
+            withContext(Dispatchers.Main) {
+                // 页面已退出时不再弹窗，避免 BadTokenException
+                if (isDestroyed || isFinishing) {
+                    return@withContext
+                }
                 updateCaptureStatus()
-                if (parseResult.courses.isEmpty()) {
-                    AlertDialog.Builder(this)
+                val result = saveResult ?: run {
+                    AlertDialog.Builder(this@ImportBrowserActivity)
                         .setTitle("导入失败")
                         .setMessage(
                             buildString {
@@ -413,27 +493,13 @@ class ImportBrowserActivity : AppCompatActivity() {
                         .also { dialog ->
                             dialog.show()
                             styleDialogButtons(dialog)
+                            releaseImportLock()
                         }
-                    return@runOnUiThread
+                    return@withContext
                 }
 
-                val saveResult = try {
-                    Result.success(
-                        ImportedScheduleStorage.importParsedCourses(
-                            context = this,
-                            courses = parseResult.courses,
-                            mode = mode,
-                            newProfileName = newProfileName?.ifBlank { null },
-                            semesterStartDate = parseResult.inferredSemesterStartDate
-                        )
-                    )
-                } catch (error: Throwable) {
-                    Log.w(TAG, "Writing imported courses failed", error)
-                    Result.failure(error)
-                }
-
-                saveResult.onSuccess {
-                    AlertDialog.Builder(this)
+                result.onSuccess {
+                    AlertDialog.Builder(this@ImportBrowserActivity)
                         .setTitle("导入成功")
                         .setMessage(
                             buildString {
@@ -460,9 +526,10 @@ class ImportBrowserActivity : AppCompatActivity() {
                         .also { dialog ->
                             dialog.show()
                             styleDialogButtons(dialog)
+                            releaseImportLock()
                         }
                 }.onFailure {
-                    AlertDialog.Builder(this)
+                    AlertDialog.Builder(this@ImportBrowserActivity)
                         .setTitle("导入失败")
                         .setMessage("写入课表失败：${it.message ?: "未知错误"}")
                         .setPositiveButton("关闭", null)
@@ -470,6 +537,7 @@ class ImportBrowserActivity : AppCompatActivity() {
                         .also { dialog ->
                             dialog.show()
                             styleDialogButtons(dialog)
+                            releaseImportLock()
                         }
                 }
             }
@@ -483,104 +551,104 @@ class ImportBrowserActivity : AppCompatActivity() {
         dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.let { UiFeedback.styleSecondaryButton(it, palette) }
     }
 
-        private fun injectNetworkCaptureScript() {
-                val script = """
-                        (function () {
-                            if (window.__jluCacheHooked) return;
-                            window.__jluCacheHooked = true;
-                            function send(url, text) {
-                                try {
-                                    if (!url || !text) return;
-                                    if (window.CacheBridge && window.CacheBridge.onNetworkResponse) {
-                                        window.CacheBridge.onNetworkResponse(String(url), String(text));
-                                    }
-                                } catch (e) {}
-                            }
-
-                            var _open = XMLHttpRequest.prototype.open;
-                            var _send = XMLHttpRequest.prototype.send;
-                            XMLHttpRequest.prototype.open = function(method, url) {
-                                this.__jluUrl = url || '';
-                                return _open.apply(this, arguments);
-                            };
-                            XMLHttpRequest.prototype.send = function() {
-                                this.addEventListener('load', function() {
-                                    send(this.__jluUrl || '', this.responseText || '');
-                                });
-                                return _send.apply(this, arguments);
-                            };
-
-                            if (window.fetch) {
-                                var _fetch = window.fetch;
-                                window.fetch = function(input, init) {
-                                    var url = (typeof input === 'string') ? input : ((input && input.url) || '');
-                                    return _fetch(input, init).then(function(resp) {
-                                        try {
-                                            var clone = resp.clone();
-                                            clone.text().then(function(text) { send(url, text); }).catch(function(){});
-                                        } catch (e) {}
-                                        return resp;
-                                    });
-                                };
-                            }
-                        })();
-                """.trimIndent()
-                webView.evaluateJavascript(script, null)
-        }
-
-        private inner class CacheJsBridge {
-                @JavascriptInterface
-                fun onNetworkResponse(url: String?, content: String?) {
-                        val safeUrl = url.orEmpty().trim()
-                        val text = content.orEmpty()
-                        if (safeUrl.isBlank() || text.length < MIN_SCHEDULE_PAYLOAD_BYTES) {
-                                return
+    private fun injectNetworkCaptureScript() {
+        val script = """
+            (function () {
+                if (window.__jluCacheHooked) return;
+                window.__jluCacheHooked = true;
+                function send(url, text) {
+                    try {
+                        if (!url || !text) return;
+                        if (window.CacheBridge && window.CacheBridge.onNetworkResponse) {
+                            window.CacheBridge.onNetworkResponse(String(url), String(text));
                         }
-
-                        if (!ScheduleImportCacheParser.isLikelyScheduleUrl(safeUrl)) {
-                                return
-                        }
-
-                        if (!text.contains("\"datas\"") || !text.contains("\"rows\"")) {
-                                return
-                        }
-
-                        val key = "JS|$safeUrl|${sha1(text).take(12)}"
-                        if (!cachedRequestKeys.add(key)) {
-                                return
-                        }
-
-                        pendingCacheWrites.incrementAndGet()
-                        updateCaptureStatus()
-                        ioExecutor.execute {
-                                try {
-                                        try {
-                                                val saved = saveTextPayload(safeUrl, text)
-                                                cacheEntries.add(saved)
-                                        } catch (error: Throwable) {
-                                                Log.w(TAG, "JS cache save failed for $safeUrl", error)
-                                        }
-                                } finally {
-                                        markCacheWriteFinished()
-                                }
-                        }
+                    } catch (e) {}
                 }
-        }
 
-        private fun saveTextPayload(url: String, text: String): CachedFileEntry {
-                val index = saveCounter.incrementAndGet()
-                val digest = sha1(url + "|" + text.take(128)).take(8)
-                val name = "%04d_js_%s.json".format(index, digest)
-                val file = File(cacheSessionDir, name)
-                file.writeText(text, Charsets.UTF_8)
-        return CachedFileEntry(
-                        url = url,
-                        fileName = name,
-                        filePath = file.absolutePath,
-                        size = text.toByteArray(Charsets.UTF_8).size,
-                        sequence = index
-                )
+                var _open = XMLHttpRequest.prototype.open;
+                var _send = XMLHttpRequest.prototype.send;
+                XMLHttpRequest.prototype.open = function(method, url) {
+                    this.__jluUrl = url || '';
+                    return _open.apply(this, arguments);
+                };
+                XMLHttpRequest.prototype.send = function() {
+                    this.addEventListener('load', function() {
+                        send(this.__jluUrl || '', this.responseText || '');
+                    });
+                    return _send.apply(this, arguments);
+                };
+
+                if (window.fetch) {
+                    var _fetch = window.fetch;
+                    window.fetch = function(input, init) {
+                        var url = (typeof input === 'string') ? input : ((input && input.url) || '');
+                        return _fetch(input, init).then(function(resp) {
+                            try {
+                                var clone = resp.clone();
+                                clone.text().then(function(text) { send(url, text); }).catch(function(){});
+                            } catch (e) {}
+                            return resp;
+                        });
+                    };
+                }
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(script, null)
+    }
+
+    private inner class CacheJsBridge {
+        @JavascriptInterface
+        fun onNetworkResponse(url: String?, content: String?) {
+            val safeUrl = url.orEmpty().trim()
+            val text = content.orEmpty()
+            if (safeUrl.isBlank() || text.length < MIN_SCHEDULE_PAYLOAD_BYTES) {
+                return
+            }
+
+            if (!ScheduleImportCacheParser.isLikelyScheduleUrl(safeUrl)) {
+                return
+            }
+
+            if (!text.contains("\"datas\"") || !text.contains("\"rows\"")) {
+                return
+            }
+
+            val key = "JS|$safeUrl|${sha1(text).take(12)}"
+            if (!cachedRequestKeys.add(key)) {
+                return
+            }
+
+            pendingCacheWrites.incrementAndGet()
+            updateCaptureStatus()
+            ioExecutor.execute {
+                try {
+                    try {
+                        val saved = saveTextPayload(safeUrl, text)
+                        cacheEntries.add(saved)
+                    } catch (error: Throwable) {
+                        Log.w(TAG, "JS cache save failed for $safeUrl", error)
+                    }
+                } finally {
+                    markCacheWriteFinished()
+                }
+            }
         }
+    }
+
+    private fun saveTextPayload(url: String, text: String): CachedFileEntry {
+        val index = saveCounter.incrementAndGet()
+        val digest = sha1(url + "|" + text.take(128)).take(8)
+        val name = "%04d_js_%s.json".format(index, digest)
+        val file = File(cacheSessionDir, name)
+        file.writeText(text, Charsets.UTF_8)
+        return CachedFileEntry(
+            url = url,
+            fileName = name,
+            filePath = file.absolutePath,
+            size = text.toByteArray(Charsets.UTF_8).size,
+            sequence = index
+        )
+    }
 
     private fun CachedFileEntry.toParserEntry(): ScheduleImportCacheParser.CacheEntry {
         return ScheduleImportCacheParser.CacheEntry(
@@ -667,16 +735,11 @@ class ImportBrowserActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "ImportBrowserActivity"
-        private const val TARGET_SCHEDULE_FILE = "cxxszhxqkb.do"
         private const val CACHE_ROOT_DIR = "import_web_cache"
         private const val MAX_CACHE_FILE_BYTES = 3 * 1024 * 1024
         private const val MAX_CACHED_FILES = 500
         private const val MIN_SCHEDULE_PAYLOAD_BYTES = 400
         private const val CACHE_SETTLE_TIMEOUT_MS = 2500L
-        private val AUTO_TRUST_SSL_HOSTS = setOf(
-            "iedu.jlu.edu.cn",
-            "vpn.jlu.edu.cn"
-        )
         const val EXTRA_URL_ASSET = "extra_url_asset"
     }
 }

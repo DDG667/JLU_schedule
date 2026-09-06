@@ -2,6 +2,7 @@ package cn.jlu.schedule
 
 import android.graphics.ImageDecoder
 import android.graphics.BitmapFactory
+import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -10,6 +11,7 @@ import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import cn.jlu.schedule.data.AppPreferences
+import cn.jlu.schedule.data.ScheduleRepository
 import cn.jlu.schedule.ui.settings.SettingsFragment
 import cn.jlu.schedule.ui.timetable.TimetableFragment
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
@@ -21,6 +23,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bottomNav: BottomNavigationView
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        ThemePaletteProvider.applyNightMode(this)
+        setTheme(ThemePaletteProvider.themeStyleFor(AppPreferences.getThemeColor(this)))
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
@@ -29,6 +33,7 @@ class MainActivity : AppCompatActivity() {
         bottomNav = findViewById(R.id.bottomNav)
         applyUserAppearance()
         refreshCustomBackground()
+        ScheduleRepository.refresh(this)
 
         if (savedInstanceState == null) {
             val defaultPage = AppPreferences.getDefaultOpenPage(this)
@@ -117,5 +122,14 @@ class MainActivity : AppCompatActivity() {
         val palette = ThemePaletteProvider.fromContext(this)
         rootContainer.setBackgroundColor(palette.pageBackground)
         bottomNav.setBackgroundColor(palette.navBackground)
+        val itemColors = ColorStateList(
+            arrayOf(
+                intArrayOf(android.R.attr.state_checked),
+                intArrayOf()
+            ),
+            intArrayOf(palette.buttonText, palette.textSecondary)
+        )
+        bottomNav.itemIconTintList = itemColors
+        bottomNav.itemTextColor = itemColors
     }
 }

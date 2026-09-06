@@ -1,39 +1,58 @@
 package cn.jlu.schedule.ui.settings
 
+import android.Manifest
 import android.app.Activity
 import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.RadioGroup
+import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.widget.SwitchCompat
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.widget.SwitchCompat
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.core.graphics.ColorUtils
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import cn.jlu.schedule.MainActivity
 import cn.jlu.schedule.R
 import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.data.ImportedScheduleStorage
+import cn.jlu.schedule.data.ScheduleRepository
+import cn.jlu.schedule.domain.SectionTimes
+import cn.jlu.schedule.ui.theme.ThemePalette
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 import cn.jlu.schedule.ui.theme.UiFeedback
 import com.yalantis.ucrop.UCrop
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 class SettingsFragment : Fragment() {
     private var pendingSourceUri: Uri? = null
 
-    private val manageProfilesLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            activity?.recreate()
+    private val manageProfilesLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
+            // 数据变化由 ScheduleRepository 状态流驱动，无需额外刷新
         }
-    }
 
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
@@ -44,12 +63,8 @@ class SettingsFragment : Fragment() {
 
     private val cropLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != Activity.RESULT_OK) {
-            val fallback = pendingSourceUri
-            if (fallback != null) {
-                AppPreferences.setCustomBackgroundUri(requireContext(), fallback.toString())
-                (activity as? MainActivity)?.refreshCustomBackground()
-                pendingSourceUri = null
-            }
+            // 用户取消裁剪：不改动现有背景，也不持久化 Photo Picker 的临时 URI（重启后会失效）
+            pendingSourceUri = null
             return@registerForActivityResult
         }
         val outputUri = result.data?.let { UCrop.getOutput(it) } ?: return@registerForActivityResult
@@ -57,6 +72,33 @@ class SettingsFragment : Fragment() {
         (activity as? MainActivity)?.refreshCustomBackground()
         pendingSourceUri = null
     }
+
+    private val requestNotificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
+            // 无论授权结果如何，开关状态已持久化；重新排程即可
+            applyReminderSchedule()
+        }
+
+    private val exportTextLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+            if (uri != null) {
+                writeExport(uri, backup = false)
+            }
+        }
+
+    private val backupLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            if (uri != null) {
+                writeExport(uri, backup = true)
+            }
+        }
+
+    private val restoreLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) {
+                confirmRestore(uri)
+            }
+        }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -68,113 +110,326 @@ class SettingsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val group = view.findViewById<RadioGroup>(R.id.defaultOpenGroup)
-        val semesterStartDateText = view.findViewById<TextView>(R.id.semesterStartDateText)
-        val changeSemesterStartButton = view.findViewById<Button>(R.id.changeSemesterStartButton)
-        val themeGroup = view.findViewById<RadioGroup>(R.id.themeGroup)
-        val fontScaleGroup = view.findViewById<RadioGroup>(R.id.fontScaleGroup)
-        val showNonCurrentSwitch = view.findViewById<SwitchCompat>(R.id.showNonCurrentSwitch)
-        val chooseBackgroundButton = view.findViewById<Button>(R.id.chooseBackgroundButton)
-        val clearBackgroundButton = view.findViewById<Button>(R.id.clearBackgroundButton)
-        val manageTimetableButton = view.findViewById<Button>(R.id.manageTimetableButton)
+        val palette = ThemePaletteProvider.fromContext(requireContext())
 
-        applyButtonStyles(
-            changeSemesterStartButton,
-            chooseBackgroundButton,
-            clearBackgroundButton,
-            manageTimetableButton
-        )
-
-        val current = AppPreferences.getDefaultOpenPage(requireContext())
-        if (current == AppPreferences.PAGE_TODAY) {
-            group.check(R.id.defaultOpenToday)
-        } else {
-            group.check(R.id.defaultOpenTimetable)
-        }
-
-        group.setOnCheckedChangeListener { _, checkedId ->
-            val page = if (checkedId == R.id.defaultOpenToday) {
-                AppPreferences.PAGE_TODAY
-            } else {
-                AppPreferences.PAGE_TIMETABLE
+        // 卡片与分隔线按主题色板着色
+        listOf(
+            view.findViewById<LinearLayout>(R.id.settingsCardTimetable),
+            view.findViewById<LinearLayout>(R.id.settingsCardAppearance),
+            view.findViewById<LinearLayout>(R.id.settingsCardReminder),
+            view.findViewById<LinearLayout>(R.id.settingsCardBackground),
+            view.findViewById<LinearLayout>(R.id.settingsCardData),
+        ).forEach { card ->
+            card.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 18f
+                setColor(palette.panelAltBackground)
+                setStroke(
+                    1,
+                    ColorUtils.blendARGB(palette.panelAltBackground, palette.iconTint, 0.16f)
+                )
             }
-            AppPreferences.setDefaultOpenPage(requireContext(), page)
         }
-
-        val semesterStartDate = ImportedScheduleStorage.getActiveSemesterStartDate(requireContext())
-        semesterStartDateText.text = semesterStartDate.format(DateTimeFormatter.ofPattern("yyyy/M/d"))
-        changeSemesterStartButton.setOnClickListener {
-            showSemesterDatePicker(semesterStartDateText)
+        listOf(
+            view.findViewById<View>(R.id.iconTimetable),
+            view.findViewById<View>(R.id.iconAppearance),
+            view.findViewById<View>(R.id.iconReminder),
+            view.findViewById<View>(R.id.iconBackground),
+            view.findViewById<View>(R.id.iconData),
+        ).forEach { icon ->
+            icon.backgroundTintList = ColorStateList.valueOf(palette.iconTint)
         }
-
-        when (AppPreferences.getThemeColor(requireContext())) {
-            AppPreferences.THEME_OCEAN -> themeGroup.check(R.id.themeOcean)
-            AppPreferences.THEME_MINT -> themeGroup.check(R.id.themeMint)
-            else -> themeGroup.check(R.id.themeWarm)
-        }
-        themeGroup.setOnCheckedChangeListener { _, checkedId ->
-            val value = when (checkedId) {
-                R.id.themeOcean -> AppPreferences.THEME_OCEAN
-                R.id.themeMint -> AppPreferences.THEME_MINT
-                else -> AppPreferences.THEME_WARM
-            }
-            AppPreferences.setThemeColor(requireContext(), value)
-            (activity as? MainActivity)?.applyUserAppearance()
-            applyButtonStyles(
-                changeSemesterStartButton,
-                chooseBackgroundButton,
-                clearBackgroundButton,
-                manageTimetableButton
+        listOf(
+            view.findViewById<View>(R.id.dividerTimetable),
+            view.findViewById<View>(R.id.dividerAppearance),
+        ).forEach { divider ->
+            divider.backgroundTintList = ColorStateList.valueOf(
+                ColorUtils.blendARGB(palette.panelAltBackground, palette.textSecondary, 0.18f)
             )
         }
 
-        val fontScale = AppPreferences.getTimetableFontScale(requireContext())
-        when {
-            fontScale < 0.95f -> fontScaleGroup.check(R.id.fontSmall)
-            fontScale > 1.08f -> fontScaleGroup.check(R.id.fontLarge)
-            else -> fontScaleGroup.check(R.id.fontNormal)
+        // 可点击行
+        val semesterStartDateText = view.findViewById<TextView>(R.id.semesterStartDateText)
+        val reminderTimeText = view.findViewById<TextView>(R.id.reminderTimeText)
+        val reminderSwitch = view.findViewById<SwitchCompat>(R.id.reminderSwitch)
+        val showNonCurrentSwitch = view.findViewById<SwitchCompat>(R.id.showNonCurrentSwitch)
+
+        view.findViewById<View>(R.id.rowManageTimetable).setOnClickListener {
+            manageProfilesLauncher.launch(Intent(requireContext(), TimetableManageActivity::class.java))
         }
-        fontScaleGroup.setOnCheckedChangeListener { _, checkedId ->
-            val value = when (checkedId) {
-                R.id.fontSmall -> 0.88f
-                R.id.fontLarge -> 1.14f
-                else -> 1.0f
+        view.findViewById<View>(R.id.rowSemesterStart).setOnClickListener {
+            showSemesterDatePicker(semesterStartDateText)
+        }
+        view.findViewById<View>(R.id.rowChooseBackground).setOnClickListener {
+            pickImageLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        }
+        view.findViewById<View>(R.id.rowClearBackground).setOnClickListener {
+            AppPreferences.setCustomBackgroundUri(requireContext(), null)
+            runCatching { File(requireContext().filesDir, "custom_background.jpg").delete() }
+            (activity as? MainActivity)?.refreshCustomBackground()
+            UiFeedback.showMessage(view, "已恢复默认背景", palette)
+        }
+        view.findViewById<View>(R.id.rowExportText).setOnClickListener {
+            val dateLabel = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"))
+            exportTextLauncher.launch("JLU课表_$dateLabel.txt")
+        }
+        view.findViewById<View>(R.id.rowBackup).setOnClickListener {
+            val dateLabel = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"))
+            backupLauncher.launch("JLU_schedule_backup_$dateLabel.json")
+        }
+        view.findViewById<View>(R.id.rowRestore).setOnClickListener {
+            restoreLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+        }
+
+        // 分段选择器
+        bindSegment(
+            view.findViewById(R.id.defaultOpenGroup),
+            palette,
+            if (AppPreferences.getDefaultOpenPage(requireContext()) == AppPreferences.PAGE_TODAY) {
+                R.id.defaultOpenToday
+            } else {
+                R.id.defaultOpenTimetable
             }
-            AppPreferences.setTimetableFontScale(requireContext(), value)
+        ) { id ->
+            val page = if (id == R.id.defaultOpenToday) AppPreferences.PAGE_TODAY else AppPreferences.PAGE_TIMETABLE
+            AppPreferences.setDefaultOpenPage(requireContext(), page)
+        }
+
+        bindSegment(
+            view.findViewById(R.id.themeGroup),
+            palette,
+            when (AppPreferences.getThemeColor(requireContext())) {
+                AppPreferences.THEME_OCEAN -> R.id.themeOcean
+                AppPreferences.THEME_MINT -> R.id.themeMint
+                else -> R.id.themeWarm
+            }
+        ) { id ->
+            AppPreferences.setThemeColor(
+                requireContext(),
+                when (id) {
+                    R.id.themeOcean -> AppPreferences.THEME_OCEAN
+                    R.id.themeMint -> AppPreferences.THEME_MINT
+                    else -> AppPreferences.THEME_WARM
+                }
+            )
+            // 主题色参与 Activity 主题属性，需重建生效
             activity?.recreate()
         }
 
+        bindSegment(
+            view.findViewById(R.id.darkModeGroup),
+            palette,
+            when (AppPreferences.getDarkMode(requireContext())) {
+                AppPreferences.DARK_LIGHT -> R.id.darkModeLight
+                AppPreferences.DARK_DARK -> R.id.darkModeDark
+                else -> R.id.darkModeSystem
+            }
+        ) { id ->
+            AppPreferences.setDarkMode(
+                requireContext(),
+                when (id) {
+                    R.id.darkModeLight -> AppPreferences.DARK_LIGHT
+                    R.id.darkModeDark -> AppPreferences.DARK_DARK
+                    else -> AppPreferences.DARK_SYSTEM
+                }
+            )
+            ThemePaletteProvider.applyNightMode(requireContext())
+        }
+
+        bindSegment(
+            view.findViewById(R.id.fontScaleGroup),
+            palette,
+            when {
+                AppPreferences.getTimetableFontScale(requireContext()) < 0.98f -> R.id.fontSmall
+                AppPreferences.getTimetableFontScale(requireContext()) > 1.08f -> R.id.fontLarge
+                else -> R.id.fontNormal
+            }
+        ) { id ->
+            AppPreferences.setTimetableFontScale(
+                requireContext(),
+                when (id) {
+                    R.id.fontSmall -> 0.95f
+                    R.id.fontLarge -> 1.15f
+                    else -> 1.0f
+                }
+            )
+            activity?.recreate()
+        }
+
+        // 学期开始日期（Repository 驱动）
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                ScheduleRepository.timetable.collect { data ->
+                    if (data != null) {
+                        semesterStartDateText.text =
+                            data.semesterStart.format(DateTimeFormatter.ofPattern("yyyy/M/d"))
+                    }
+                }
+            }
+        }
+        ScheduleRepository.refresh(requireContext())
+
+        // 非本周课程开关
         showNonCurrentSwitch.isChecked = AppPreferences.isShowNonCurrentCourses(requireContext())
         showNonCurrentSwitch.setOnCheckedChangeListener { _, isChecked ->
             AppPreferences.setShowNonCurrentCourses(requireContext(), isChecked)
             activity?.recreate()
         }
 
-        chooseBackgroundButton.setOnClickListener {
-            pickImageLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        // 每日提醒
+        reminderSwitch.isChecked = AppPreferences.isReminderEnabled(requireContext())
+        updateReminderTimeText(reminderTimeText)
+        view.findViewById<View>(R.id.rowReminderTime).setOnClickListener {
+            val minuteOfDay = AppPreferences.getReminderMinute(requireContext())
+            TimePickerDialog(
+                requireContext(),
+                { _, hour, minute ->
+                    AppPreferences.setReminderMinute(requireContext(), hour * 60 + minute)
+                    updateReminderTimeText(reminderTimeText)
+                    applyReminderSchedule()
+                },
+                minuteOfDay / 60,
+                minuteOfDay % 60,
+                true
+            ).show()
         }
-
-        clearBackgroundButton.setOnClickListener {
-            AppPreferences.setCustomBackgroundUri(requireContext(), null)
-            (activity as? MainActivity)?.refreshCustomBackground()
-        }
-
-        manageTimetableButton.setOnClickListener {
-            val intent = Intent(requireContext(), TimetableManageActivity::class.java)
-            manageProfilesLauncher.launch(intent)
+        reminderSwitch.setOnCheckedChangeListener { _, isChecked ->
+            AppPreferences.setReminderEnabled(requireContext(), isChecked)
+            if (isChecked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                applyReminderSchedule()
+            }
         }
     }
 
+    private fun bindSegment(
+        container: LinearLayout,
+        palette: ThemePalette,
+        selectedId: Int,
+        onSelected: (Int) -> Unit
+    ) {
+        // 选中状态保存在闭包内并即时重绘：不依赖页面重建（"启动默认打开"等
+        // 不触发 recreate 的选项，以及 NightMode 视觉不变时的模式切换）
+        var currentSelection = selectedId
+
+        fun restyle() {
+            val count = container.childCount
+            for (i in 0 until count) {
+                val child = container.getChildAt(i) as? TextView ?: continue
+                val checked = child.id == currentSelection
+                child.background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 9f
+                    setColor(if (checked) palette.buttonBackground else palette.panelBackground)
+                }
+                child.setTextColor(if (checked) palette.buttonText else palette.textSecondary)
+            }
+        }
+
+        restyle()
+        val count = container.childCount
+        for (i in 0 until count) {
+            val child = container.getChildAt(i) as? TextView ?: continue
+            child.setOnClickListener {
+                if (child.id != currentSelection) {
+                    currentSelection = child.id
+                    restyle()
+                    onSelected(child.id)
+                }
+            }
+        }
+    }
+
+    private fun updateReminderTimeText(textView: TextView) {
+        val minuteOfDay = AppPreferences.getReminderMinute(requireContext())
+        textView.text = String.format(Locale.getDefault(), "%02d:%02d", minuteOfDay / 60, minuteOfDay % 60)
+    }
+
+    private fun applyReminderSchedule() {
+        val context = context ?: return
+        cn.jlu.schedule.reminder.ReminderScheduler.reschedule(context)
+    }
+
+    private fun writeExport(uri: Uri, backup: Boolean) {
+        val anchor = view
+        viewLifecycleOwner.lifecycleScope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    val content = if (backup) {
+                        ImportedScheduleStorage.exportBackup(requireContext().filesDir)
+                    } else {
+                        ImportedScheduleStorage.exportActiveTimetableText(
+                            requireContext().filesDir,
+                            SectionTimes.DEFAULT_RANGES
+                        )
+                    }
+                    requireContext().contentResolver.openOutputStream(uri)?.use { stream ->
+                        stream.write(content.toByteArray(Charsets.UTF_8))
+                    } ?: throw IllegalStateException("无法打开输出位置")
+                }
+            }
+            withContext(Dispatchers.Main) {
+                val palette = ThemePaletteProvider.fromContext(requireContext())
+                when {
+                    result.isSuccess && backup ->
+                        UiFeedback.showMessage(anchor, getString(R.string.settings_backup_success), palette)
+                    result.isSuccess ->
+                        UiFeedback.showMessage(anchor, getString(R.string.settings_export_success), palette)
+                    backup ->
+                        UiFeedback.showMessage(anchor, getString(R.string.settings_backup_failed), palette)
+                    else ->
+                        UiFeedback.showMessage(anchor, getString(R.string.settings_export_failed), palette)
+                }
+            }
+        }
+    }
+
+    private fun confirmRestore(uri: Uri) {
+        val ctx = context ?: return
+        androidx.appcompat.app.AlertDialog.Builder(ctx)
+            .setTitle(getString(R.string.settings_restore))
+            .setMessage(getString(R.string.settings_restore_confirm))
+            .setPositiveButton(getString(R.string.action_save)) { _, _ ->
+                val anchor = view
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val result = runCatching {
+                        val content = withContext(Dispatchers.IO) {
+                            ctx.contentResolver.openInputStream(uri)?.use { stream ->
+                                stream.readBytes().toString(Charsets.UTF_8)
+                            } ?: throw IllegalStateException("无法读取文件")
+                        }
+                        ScheduleRepository.restoreBackup(ctx, content).getOrThrow()
+                    }
+                    withContext(Dispatchers.Main) {
+                        val palette = ThemePaletteProvider.fromContext(ctx)
+                        result.onSuccess { count ->
+                            UiFeedback.showMessage(anchor, getString(R.string.settings_restore_success, count), palette)
+                        }.onFailure {
+                            UiFeedback.showMessage(anchor, getString(R.string.settings_restore_failed), palette)
+                        }
+                    }
+                }
+            }
+            .setNegativeButton(getString(R.string.action_cancel), null)
+            .create()
+            .also { dialog -> dialog.show() }
+    }
+
     private fun showSemesterDatePicker(dateTextView: TextView) {
-        val current = ImportedScheduleStorage.getActiveSemesterStartDate(requireContext())
+        val ctx = context ?: return
+        val current = ScheduleRepository.timetable.value?.semesterStart
+            ?: ImportedScheduleStorage.getActiveSemesterStartDate(ctx.filesDir)
         DatePickerDialog(
-            requireContext(),
+            ctx,
             { _, year, month, dayOfMonth ->
                 val selected = LocalDate.of(year, month + 1, dayOfMonth)
-                ImportedScheduleStorage.setActiveSemesterStartDate(requireContext(), selected)
-                val normalized = ImportedScheduleStorage.getActiveSemesterStartDate(requireContext())
-                dateTextView.text = normalized.format(DateTimeFormatter.ofPattern("yyyy/M/d"))
-                activity?.recreate()
+                viewLifecycleOwner.lifecycleScope.launch {
+                    ScheduleRepository.setActiveSemesterStartDate(ctx, selected)
+                }
             },
             current.year,
             current.monthValue - 1,
@@ -184,7 +439,11 @@ class SettingsFragment : Fragment() {
 
     private fun startCrop(sourceUri: Uri) {
         val outputFile = File(requireContext().filesDir, "custom_background.jpg")
-        val destinationUri = Uri.fromFile(outputFile)
+        val destinationUri = FileProvider.getUriForFile(
+            requireContext(),
+            "${requireContext().packageName}.fileprovider",
+            outputFile
+        )
 
         val options = UCrop.Options().apply {
             setFreeStyleCropEnabled(true)
@@ -197,22 +456,7 @@ class SettingsFragment : Fragment() {
         runCatching {
             cropLauncher.launch(cropIntent)
         }.onFailure {
-            AppPreferences.setCustomBackgroundUri(requireContext(), sourceUri.toString())
-            (activity as? MainActivity)?.refreshCustomBackground()
             pendingSourceUri = null
         }
-    }
-
-    private fun applyButtonStyles(
-        changeSemesterStartButton: Button,
-        chooseBackgroundButton: Button,
-        clearBackgroundButton: Button,
-        manageTimetableButton: Button
-    ) {
-        val palette = ThemePaletteProvider.fromContext(requireContext())
-        UiFeedback.styleSecondaryButton(changeSemesterStartButton, palette)
-        UiFeedback.styleSecondaryButton(chooseBackgroundButton, palette)
-        UiFeedback.styleSecondaryButton(clearBackgroundButton, palette)
-        UiFeedback.styleSecondaryButton(manageTimetableButton, palette)
     }
 }

@@ -129,6 +129,193 @@ class DoScheduleParserTest {
         assertEquals("2026-2027-1", courses.single().semester)
     }
 
+    @Test
+    fun parse_supportsDiscreteWeekList() {
+        val courses = DoScheduleParser.parse(
+            scheduleJson(
+                """
+                    {
+                      "KCM": "体育",
+                      "SKJS": "钱七",
+                      "YPSJDD": "第1,3,5,7周 星期三 第3节-第4节 田径场"
+                    }
+                """.trimIndent()
+            )
+        )
+
+        val rules = courses.single().meetings.single().weekRules
+        assertEquals(listOf(1, 3, 5, 7), rules.map { it.startWeek })
+        assertEquals(listOf(1, 3, 5, 7), rules.map { it.endWeek })
+        assertEquals(listOf(WeekParity.ALL, WeekParity.ALL, WeekParity.ALL, WeekParity.ALL), rules.map { it.parity })
+    }
+
+    @Test
+    fun parse_supportsDiscreteWeekListWithFullWidthParenParity() {
+        val courses = DoScheduleParser.parse(
+            scheduleJson(
+                """
+                    {
+                      "KCM": "英语",
+                      "SKJS": "孙八",
+                      "YPSJDD": "第1,3,5周（单） 星期一 第1节-第2节 外语楼"
+                    }
+                """.trimIndent()
+            )
+        )
+
+        val rules = courses.single().meetings.single().weekRules
+        assertEquals(listOf(1, 3, 5), rules.map { it.startWeek })
+        assertEquals(listOf(WeekParity.ODD, WeekParity.ODD, WeekParity.ODD), rules.map { it.parity })
+    }
+
+    @Test
+    fun parse_supportsFullWidthParenParityOnRange() {
+        val courses = DoScheduleParser.parse(
+            scheduleJson(
+                """
+                    {
+                      "KCM": "化学",
+                      "SKJS": "周九",
+                      "YPSJDD": "1-16周（双） 星期二 第5节-第6节 实验楼"
+                    }
+                """.trimIndent()
+            )
+        )
+
+        val rule = courses.single().meetings.single().weekRules.single()
+        assertEquals(1, rule.startWeek)
+        assertEquals(16, rule.endWeek)
+        assertEquals(WeekParity.EVEN, rule.parity)
+    }
+
+    @Test
+    fun parse_splitsSegmentsSeparatedByChineseComma() {
+        val courses = DoScheduleParser.parse(
+            scheduleJson(
+                """
+                    {
+                      "KCM": "数据结构",
+                      "SKJS": "吴十",
+                      "YPSJDD": "1-8周(单) 星期二 第1节-第2节 A楼，9-16周(双) 星期四 第7节-第8节 B楼"
+                    }
+                """.trimIndent()
+            )
+        )
+
+        val meetings = courses.single().meetings
+        assertEquals(2, meetings.size)
+        assertEquals(WeekParity.ODD, meetings[0].weekRules.single().parity)
+        assertEquals("A楼", meetings[0].location)
+        assertEquals(WeekParity.EVEN, meetings[1].weekRules.single().parity)
+        assertEquals("B楼", meetings[1].location)
+    }
+
+    @Test
+    fun parse_supportsCompactSectionFormat() {
+        val courses = DoScheduleParser.parse(
+            scheduleJson(
+                """
+                    {
+                      "KCM": "力学",
+                      "SKJS": "郑一",
+                      "YPSJDD": "1-16周 星期一 第1-2节 教三302"
+                    }
+                """.trimIndent()
+            )
+        )
+
+        val meeting = courses.single().meetings.single()
+        assertEquals(1, meeting.startSection)
+        assertEquals(2, meeting.endSection)
+    }
+
+    @Test
+    fun parse_swapsReversedWeekAndSectionRanges() {
+        val courses = DoScheduleParser.parse(
+            scheduleJson(
+                """
+                    {
+                      "KCM": "光学",
+                      "SKJS": "王二",
+                      "YPSJDD": "16-1周 星期一 第4节-第2节 教室"
+                    }
+                """.trimIndent()
+            )
+        )
+
+        val meeting = courses.single().meetings.single()
+        assertEquals(2, meeting.startSection)
+        assertEquals(4, meeting.endSection)
+        val rule = meeting.weekRules.single()
+        assertEquals(1, rule.startWeek)
+        assertEquals(16, rule.endWeek)
+    }
+
+    @Test
+    fun parse_defaultsToFullRangeWhenWeekTextIsUnparseable() {
+        val courses = DoScheduleParser.parse(
+            scheduleJson(
+                """
+                    {
+                      "KCM": "选修",
+                      "SKJS": "李三",
+                      "YPSJDD": "待定 星期五 第1节-第2节 教室"
+                    }
+                """.trimIndent()
+            )
+        )
+
+        val rule = courses.single().meetings.single().weekRules.single()
+        assertEquals(1, rule.startWeek)
+        assertEquals(20, rule.endWeek)
+        assertEquals(WeekParity.ALL, rule.parity)
+    }
+
+    @Test
+    fun parse_defaultsToFullRangeWithParityForBareParityWeekText() {
+        val courses = DoScheduleParser.parse(
+            scheduleJson(
+                """
+                    {
+                      "KCM": "实验",
+                      "SKJS": "张三",
+                      "ZCMC": "双周",
+                      "SKXQ": 3,
+                      "KSJC": 5,
+                      "JSJC": 6
+                    }
+                """.trimIndent()
+            )
+        )
+
+        val meeting = courses.single().meetings.single()
+        val rule = meeting.weekRules.single()
+        assertEquals(WeekParity.EVEN, rule.parity)
+        assertEquals(1, rule.startWeek)
+        assertEquals(20, rule.endWeek)
+    }
+
+    @Test
+    fun parse_toleratesExplicitNullDatas() {
+        assertEquals(0, DoScheduleParser.parse("""{"datas": null}""").size)
+    }
+
+    @Test
+    fun parse_toleratesExplicitNullRows() {
+        val courses = DoScheduleParser.parse(
+            """
+                {
+                  "datas": {
+                    "xskcb": {
+                      "rows": null
+                    }
+                  }
+                }
+            """.trimIndent()
+        )
+        assertEquals(0, courses.size)
+    }
+
     private fun scheduleJson(rows: String): String {
         return """
             {

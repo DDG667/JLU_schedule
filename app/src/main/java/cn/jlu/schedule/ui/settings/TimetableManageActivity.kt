@@ -1,7 +1,6 @@
 package cn.jlu.schedule.ui.settings
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -20,11 +19,17 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.core.graphics.ColorUtils
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import cn.jlu.schedule.R
+import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.data.ImportedScheduleStorage
+import cn.jlu.schedule.data.ScheduleRepository
 import cn.jlu.schedule.ui.theme.ThemePalette
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 import cn.jlu.schedule.ui.theme.UiFeedback
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -37,13 +42,14 @@ class TimetableManageActivity : AppCompatActivity() {
     private lateinit var subTitleView: TextView
     private lateinit var adapter: ProfileAdapter
     private lateinit var palette: ThemePalette
-    private var hasChanged = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        ThemePaletteProvider.applyNightMode(this)
+        setTheme(ThemePaletteProvider.themeStyleFor(AppPreferences.getThemeColor(this)))
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_timetable_manage)
 
-        title = "课表管理"
+        title = getString(R.string.manage_title)
         titleView = findViewById(R.id.manageTitle)
         subTitleView = findViewById(R.id.manageSubTitle)
         listView = findViewById(R.id.profileList)
@@ -57,14 +63,21 @@ class TimetableManageActivity : AppCompatActivity() {
         applySystemBarInsets()
         applyTheme()
         bindEvents()
-        refreshProfiles()
+        observeProfiles()
     }
 
-    override fun finish() {
-        if (hasChanged) {
-            setResult(Activity.RESULT_OK)
+    private fun observeProfiles() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                ScheduleRepository.timetable.collect { data ->
+                    if (data != null) {
+                        adapter.submit(data.profiles)
+                        subTitleView.text = getString(R.string.manage_subtitle_count, data.profiles.size)
+                    }
+                }
+            }
         }
-        super.finish()
+        ScheduleRepository.refresh(this)
     }
 
     private fun applyTheme() {
@@ -98,33 +111,32 @@ class TimetableManageActivity : AppCompatActivity() {
         createButton.setOnClickListener {
             @SuppressLint("SetTextI18n")
             val input = EditText(this).apply {
-                hint = "新课表名称（可留空）"
+                hint = getString(R.string.manage_name_hint)
                 setText("课表${System.currentTimeMillis() % 100000}")
             }
             AlertDialog.Builder(this)
-                .setTitle("新建课表")
+                .setTitle(getString(R.string.manage_create_title))
                 .setView(input)
-                .setPositiveButton("新建") { _, _ ->
-                    ImportedScheduleStorage.createEmptyProfile(
-                        this,
-                        input.text?.toString()?.trim().orEmpty()
-                    )
-                    hasChanged = true
-                    UiFeedback.showMessage(findViewById(android.R.id.content), "已新建并切换到新课表", palette)
-                    refreshProfiles()
+                .setPositiveButton(getString(R.string.manage_create_confirm)) { _, _ ->
+                    lifecycleScope.launch {
+                        ScheduleRepository.createEmptyProfile(
+                            this@TimetableManageActivity,
+                            input.text?.toString()?.trim().orEmpty()
+                        )
+                        UiFeedback.showMessage(
+                            findViewById(android.R.id.content),
+                            getString(R.string.manage_created),
+                            palette
+                        )
+                    }
                 }
-                .setNegativeButton("取消", null)
+                .setNegativeButton(getString(R.string.action_cancel), null)
                 .create()
                 .also { dialog ->
                     dialog.show()
                     styleDialogButtons(dialog)
                 }
         }
-    }
-
-    private fun refreshProfiles() {
-        adapter.submit(ImportedScheduleStorage.listProfiles(this))
-        subTitleView.text = String.format(Locale.getDefault(), "共 %d 个课表，点按可切换当前课表", adapter.count)
     }
 
     private inner class ProfileAdapter : BaseAdapter() {
@@ -172,13 +184,17 @@ class TimetableManageActivity : AppCompatActivity() {
 
             view.setOnClickListener {
                 if (item.isActive) {
-                    UiFeedback.showMessage(findViewById(android.R.id.content), "已是当前课表", palette)
+                    UiFeedback.showMessage(findViewById(android.R.id.content), getString(R.string.manage_already_active), palette)
                     return@setOnClickListener
                 }
-                ImportedScheduleStorage.setActiveProfile(this@TimetableManageActivity, item.id)
-                hasChanged = true
-                UiFeedback.showMessage(findViewById(android.R.id.content), "已切换到：${item.name}", palette)
-                refreshProfiles()
+                lifecycleScope.launch {
+                    ScheduleRepository.setActiveProfile(this@TimetableManageActivity, item.id)
+                    UiFeedback.showMessage(
+                        findViewById(android.R.id.content),
+                        getString(R.string.manage_switched, item.name),
+                        palette
+                    )
+                }
             }
 
             overflow.setOnClickListener { anchor ->
@@ -193,14 +209,15 @@ class TimetableManageActivity : AppCompatActivity() {
                 setPadding(34, 28, 34, 20)
             }
             val renameButton = Button(this@TimetableManageActivity).apply {
-                text = "重命名"
+                text = getString(R.string.manage_rename)
             }
             val deleteButton = Button(this@TimetableManageActivity).apply {
-                text = "删除"
+                text = getString(R.string.manage_delete)
             }
             val cancelButton = Button(this@TimetableManageActivity).apply {
-                text = "取消"
+                text = getString(R.string.action_cancel)
             }
+            val palette = ThemePaletteProvider.fromContext(this@TimetableManageActivity)
             UiFeedback.styleSecondaryButton(renameButton, palette)
             UiFeedback.styleSecondaryButton(deleteButton, palette)
             UiFeedback.styleSecondaryButton(cancelButton, palette)
@@ -239,27 +256,31 @@ class TimetableManageActivity : AppCompatActivity() {
             val input = EditText(this@TimetableManageActivity).apply {
                 setText(item.name)
                 setSelection(item.name.length)
-                hint = "课表名称"
+                hint = getString(R.string.manage_name_hint2)
             }
             AlertDialog.Builder(this@TimetableManageActivity)
-                .setTitle("重命名课表")
+                .setTitle(getString(R.string.manage_rename_title))
                 .setView(input)
-                .setPositiveButton("保存") { _, _ ->
+                .setPositiveButton(getString(R.string.action_save)) { _, _ ->
                     val newName = input.text?.toString()?.trim().orEmpty()
                     if (newName.isBlank()) {
-                        UiFeedback.showMessage(findViewById(android.R.id.content), "名称不能为空", palette)
+                        UiFeedback.showMessage(findViewById(android.R.id.content), getString(R.string.manage_name_empty), palette)
                         return@setPositiveButton
                     }
-                    val ok = ImportedScheduleStorage.renameProfile(this@TimetableManageActivity, item.id, newName)
-                    if (!ok) {
-                        UiFeedback.showMessage(findViewById(android.R.id.content), "重命名失败", palette)
-                        return@setPositiveButton
+                    lifecycleScope.launch {
+                        val ok = ScheduleRepository.renameProfile(
+                            this@TimetableManageActivity,
+                            item.id,
+                            newName
+                        )
+                        if (ok.getOrDefault(false)) {
+                            UiFeedback.showMessage(findViewById(android.R.id.content), getString(R.string.manage_renamed), palette)
+                        } else {
+                            UiFeedback.showMessage(findViewById(android.R.id.content), getString(R.string.manage_rename_failed), palette)
+                        }
                     }
-                    hasChanged = true
-                    UiFeedback.showMessage(findViewById(android.R.id.content), "已重命名", palette)
-                    refreshProfiles()
                 }
-                .setNegativeButton("取消", null)
+                .setNegativeButton(getString(R.string.action_cancel), null)
                 .create()
                 .also { dialog ->
                     dialog.show()
@@ -269,19 +290,22 @@ class TimetableManageActivity : AppCompatActivity() {
 
         private fun deleteProfile(item: ImportedScheduleStorage.TimetableProfile) {
             AlertDialog.Builder(this@TimetableManageActivity)
-                .setTitle("删除课表")
-                .setMessage("确认删除「${item.name}」吗？")
-                .setPositiveButton("删除") { _, _ ->
-                    val deleted = ImportedScheduleStorage.deleteProfile(this@TimetableManageActivity, item.id)
-                    if (!deleted) {
-                        UiFeedback.showMessage(findViewById(android.R.id.content), "至少保留一个课表，无法删除", palette)
-                        return@setPositiveButton
+                .setTitle(getString(R.string.manage_delete_title))
+                .setMessage(getString(R.string.manage_delete_message, item.name))
+                .setPositiveButton(getString(R.string.manage_delete)) { _, _ ->
+                    lifecycleScope.launch {
+                        val deleted = ScheduleRepository.deleteProfile(
+                            this@TimetableManageActivity,
+                            item.id
+                        )
+                        if (deleted.getOrDefault(false)) {
+                            UiFeedback.showMessage(findViewById(android.R.id.content), getString(R.string.manage_deleted), palette)
+                        } else {
+                            UiFeedback.showMessage(findViewById(android.R.id.content), getString(R.string.manage_delete_failed), palette)
+                        }
                     }
-                    hasChanged = true
-                    UiFeedback.showMessage(findViewById(android.R.id.content), "已删除课表", palette)
-                    refreshProfiles()
                 }
-                .setNegativeButton("取消", null)
+                .setNegativeButton(getString(R.string.action_cancel), null)
                 .create()
                 .also { dialog ->
                     dialog.show()

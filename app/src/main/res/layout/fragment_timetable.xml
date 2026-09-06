@@ -26,7 +26,7 @@
                 android:id="@+id/currentWeekText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textColor="#5A3D1F"
+                android:textColor="?android:attr/textColorPrimary"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -35,7 +35,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="2dp"
-                android:textColor="#7A5A37"
+                android:textColor="?android:attr/textColorSecondary"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -47,7 +47,7 @@
             android:background="@drawable/bg_icon_action_button"
             android:contentDescription="@string/timetable_add_course"
             android:padding="8dp"
-            android:src="@android:drawable/ic_input_add"
+            android:src="@drawable/ic_action_add"
             app:tint="#1F1F1F" />
 
         <ImageButton
@@ -57,7 +57,7 @@
             android:background="@drawable/bg_icon_action_button"
             android:contentDescription="@string/timetable_import"
             android:padding="8dp"
-            android:src="@android:drawable/ic_menu_upload"
+            android:src="@drawable/ic_action_import"
             app:tint="#1F1F1F" />
     </LinearLayout>
 

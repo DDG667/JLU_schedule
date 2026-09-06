@@ -6,12 +6,12 @@ import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class RawScheduleResponse(
-    val datas: Map<String, RawScheduleTable> = emptyMap()
+    val datas: Map<String, RawScheduleTable>? = null
 )
 
 @Serializable
 data class RawScheduleTable(
-    val rows: List<RawCourseRow> = emptyList()
+    val rows: List<RawCourseRow>? = null
 )
 
 @Serializable

@@ -10,6 +10,7 @@ import cn.jlu.schedule.domain.WeekScheduleCalculator
 import cn.jlu.schedule.domain.CourseMeetingRef
 import cn.jlu.schedule.model.CourseSchedule
 import cn.jlu.schedule.model.Weekday
+import cn.jlu.schedule.ui.theme.ThemePalette
 import java.time.LocalDate
 
 class WeekPagerAdapter(
@@ -24,7 +25,7 @@ class WeekPagerAdapter(
     private val baseWeek: Int,
     private val showNonCurrent: Boolean,
     private val fontScale: Float,
-    private val theme: String,
+    private val palette: ThemePalette,
     private val hasCustomBackground: Boolean,
     private val onCourseClick: (CourseMeetingRef) -> Unit
 ) : RecyclerView.Adapter<WeekPagerAdapter.WeekViewHolder>() {
@@ -46,7 +47,7 @@ class WeekPagerAdapter(
         private val headerRow: LinearLayout = itemView.findViewById(R.id.headerRow)
         private val bodyRow: LinearLayout = itemView.findViewById(R.id.bodyRow)
 
-        private val renderer = WeekTimetableRenderer(periodRanges, weekdayLabels, cardColors, fontScale, theme, hasCustomBackground)
+        private val renderer = WeekTimetableRenderer(periodRanges, weekdayLabels, cardColors, fontScale, palette, hasCustomBackground)
 
         fun bind(week: Int, weekStart: LocalDate) {
             val metrics = TimetableMetrics.create(itemView.context)
