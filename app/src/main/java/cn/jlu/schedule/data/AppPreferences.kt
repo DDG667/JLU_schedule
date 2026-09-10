@@ -19,6 +19,7 @@ object AppPreferences {
     const val THEME_WARM = "warm"
     const val THEME_OCEAN = "ocean"
     const val THEME_MINT = "mint"
+    const val THEME_MONET = "monet"
     const val DARK_SYSTEM = "system"
     const val DARK_LIGHT = "light"
     const val DARK_DARK = "dark"
@@ -73,17 +74,22 @@ object AppPreferences {
 
     fun getThemeColor(context: Context): String {
         val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(KEY_THEME_COLOR, THEME_WARM)
-        return when (raw) {
-            THEME_OCEAN, THEME_MINT -> raw
-            else -> THEME_WARM
+            .getString(KEY_THEME_COLOR, THEME_MONET)
+        val theme = when (raw) {
+            THEME_OCEAN, THEME_MINT, THEME_MONET -> raw ?: THEME_MONET
+            else -> THEME_MONET
+        }
+        return if (theme == THEME_MONET && android.os.Build.VERSION.SDK_INT < 31) {
+            THEME_WARM
+        } else {
+            theme
         }
     }
 
     fun setThemeColor(context: Context, theme: String) {
         val safe = when (theme) {
-            THEME_OCEAN, THEME_MINT -> theme
-            else -> THEME_WARM
+            THEME_OCEAN, THEME_MINT, THEME_MONET -> theme
+            else -> THEME_MONET
         }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()

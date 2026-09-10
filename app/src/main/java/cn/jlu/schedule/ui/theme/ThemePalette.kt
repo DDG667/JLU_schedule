@@ -1,9 +1,13 @@
 package cn.jlu.schedule.ui.theme
 
 import android.content.Context
+import android.graphics.Color
+import android.util.TypedValue
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.graphics.ColorUtils
 import cn.jlu.schedule.R
 import cn.jlu.schedule.data.AppPreferences
+import com.google.android.material.color.DynamicColors
 
 data class ThemePalette(
     val pageBackground: Int,
@@ -33,6 +37,54 @@ object ThemePaletteProvider {
     }
 
     fun fromTheme(context: Context, theme: String): ThemePalette {
+        val isDark = (context.resources.configuration.uiMode and
+                android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+
+        if (theme == AppPreferences.THEME_MONET && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val monetContext = DynamicColors.wrapContextIfAvailable(context)
+            fun resolve(name: String): Int {
+                val id = context.resources.getIdentifier(name, "attr", context.packageName)
+                val typedValue = TypedValue()
+                return if (id != 0 && monetContext.theme.resolveAttribute(id, typedValue, true)) {
+                    typedValue.data
+                } else {
+                    Color.MAGENTA
+                }
+            }
+
+            val primary = resolve("colorPrimary")
+            val onSurface = resolve("colorOnSurface")
+            val onSurfaceVariant = resolve("colorOnSurfaceVariant")
+            val surface = resolve("colorSurface")
+            val surfaceVariant = resolve("colorSurfaceVariant")
+            val primaryContainer = resolve("colorPrimaryContainer")
+            val onPrimaryContainer = resolve("colorOnPrimaryContainer")
+            val secondaryContainer = resolve("colorSecondaryContainer")
+            val tertiaryContainer = resolve("colorTertiaryContainer")
+
+            return ThemePalette(
+                pageBackground = surface,
+                navBackground = ColorUtils.setAlphaComponent(surface, 217), // 0xD9
+                panelBackground = surfaceVariant,
+                panelAltBackground = ColorUtils.blendARGB(surface, surfaceVariant, 0.5f),
+                textPrimary = onSurface,
+                textSecondary = onSurfaceVariant,
+                iconTint = primary,
+                buttonBackground = primaryContainer,
+                buttonText = onPrimaryContainer,
+                gridHeader = secondaryContainer,
+                gridHeaderToday = tertiaryContainer,
+                gridLeftColumn = ColorUtils.blendARGB(surface, surfaceVariant, 0.3f),
+                gridDayCell = surface,
+                gridDayToday = ColorUtils.blendARGB(surface, primaryContainer, 0.2f),
+                detailCard = surfaceVariant,
+                detailTitle = onSurface,
+                detailBody = onSurfaceVariant,
+                detailMeta = ColorUtils.setAlphaComponent(onSurfaceVariant, 180),
+                isDark = isDark
+            )
+        }
+
         val prefix = when (theme) {
             AppPreferences.THEME_OCEAN -> "ocean"
             AppPreferences.THEME_MINT -> "mint"
@@ -44,8 +96,6 @@ object ThemePaletteProvider {
             )
             return context.getColor(if (id != 0) id else R.color.warm_page_background)
         }
-        val isDark = (context.resources.configuration.uiMode and
-            android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
         return ThemePalette(
             pageBackground = color("page_background"),
             navBackground = color("nav_background"),
@@ -73,6 +123,13 @@ object ThemePaletteProvider {
         return when (theme) {
             AppPreferences.THEME_OCEAN -> R.style.Theme_JLU_Ocean
             AppPreferences.THEME_MINT -> R.style.Theme_JLU_Mint
+            AppPreferences.THEME_MONET -> {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    R.style.Theme_JLU_Monet
+                } else {
+                    R.style.Theme_JLU_Warm
+                }
+            }
             else -> R.style.Theme_JLU_Warm
         }
     }

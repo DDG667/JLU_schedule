@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#E36A3A</color>
+    <color name="ic_launcher_background">@color/tokyo_night_background</color>
 
     <!-- 暖色（浅色） -->
     <color name="warm_page_background">#F7E7CC</color>
@@ -61,4 +61,15 @@
     <color name="mint_detail_title">#1F4C3A</color>
     <color name="mint_detail_body">#325E4C</color>
     <color name="mint_detail_meta">#5E7F72</color>
+
+    <!-- Tokyo Night -->
+    <color name="tokyo_night_background">#1a1b26</color>
+    <color name="tokyo_night_panel">#24283b</color>
+    <color name="tokyo_night_foreground">#c0caf5</color>
+    <color name="tokyo_night_muted">#565f89</color>
+    <color name="tokyo_night_accent">#7aa2f7</color>
+    <color name="tokyo_night_border">#414868</color>
+    <color name="tokyo_night_red">#f7768e</color>
+    <color name="tokyo_night_green">#9ece6a</color>
+    <color name="tokyo_night_yellow">#e0af68</color>
 </resources>

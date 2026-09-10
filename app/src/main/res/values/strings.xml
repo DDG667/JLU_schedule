@@ -41,6 +41,7 @@
     <string name="settings_theme_warm">暖色</string>
     <string name="settings_theme_ocean">海蓝</string>
     <string name="settings_theme_mint">薄荷</string>
+    <string name="settings_theme_monet">动态取色</string>
     <string name="settings_font_scale">课表字号</string>
     <string name="settings_font_small">小号</string>
     <string name="settings_font_normal">标准</string>

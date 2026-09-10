@@ -35,6 +35,10 @@
         <item name="android:windowBackground">@color/mint_page_background</item>
     </style>
 
+    <style name="Theme.JLU.Monet" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Monet colors will be applied dynamically in code -->
+    </style>
+
     <!-- 设置页卡片分组样式（颜色在代码中按主题色板动态着色） -->
     <style name="SettingsCard">
         <item name="android:layout_width">match_parent</item>

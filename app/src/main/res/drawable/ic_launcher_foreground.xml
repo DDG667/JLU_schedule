@@ -8,31 +8,31 @@
     android:viewportHeight="108">
     <!-- 课表卡片主体（白色圆角） -->
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="@color/tokyo_night_foreground"
         android:pathData="M38,28h32a6,6 0 0 1 6,6v40a6,6 0 0 1 -6,6h-32a6,6 0 0 1 -6,-6v-40a6,6 0 0 1 6,-6z" />
     <!-- 顶栏（品牌橙，仅上圆角：矩形叠加把下缘抹平） -->
     <path
-        android:fillColor="#E36A3A"
+        android:fillColor="@color/tokyo_night_accent"
         android:pathData="M38,28h32a6,6 0 0 1 6,6v8h-44v-8a6,6 0 0 1 6,-6z" />
     <!-- 顶栏左侧小圆点（装订孔） -->
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="@color/tokyo_night_foreground"
         android:pathData="M44,35m-2.4,0a2.4,2.4 0 1 0 4.8,0a2.4,2.4 0 1 0 -4.8,0" />
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="@color/tokyo_night_foreground"
         android:pathData="M64,35m-2.4,0a2.4,2.4 0 1 0 4.8,0a2.4,2.4 0 1 0 -4.8,0" />
     <!-- 课程格子：2 行 3 列，浅灰占位 -->
     <path
-        android:fillColor="#EFE3D0"
+        android:fillColor="@color/tokyo_night_muted"
         android:pathData="M37,46h10a2,2 0 0 1 2,2v8a2,2 0 0 1 -2,2h-10a2,2 0 0 1 -2,-2v-8a2,2 0 0 1 2,-2z" />
     <path
-        android:fillColor="#EFE3D0"
+        android:fillColor="@color/tokyo_night_muted"
         android:pathData="M53,46h10a2,2 0 0 1 2,2v8a2,2 0 0 1 -2,2h-10a2,2 0 0 1 -2,-2v-8a2,2 0 0 1 2,-2z" />
     <path
-        android:fillColor="#EFE3D0"
+        android:fillColor="@color/tokyo_night_muted"
         android:pathData="M37,62h10a2,2 0 0 1 2,2v8a2,2 0 0 1 -2,2h-10a2,2 0 0 1 -2,-2v-8a2,2 0 0 1 2,-2z" />
     <!-- 高亮课程块（品牌橙） -->
     <path
-        android:fillColor="#E36A3A"
+        android:fillColor="@color/tokyo_night_accent"
         android:pathData="M53,62h10a2,2 0 0 1 2,2v8a2,2 0 0 1 -2,2h-10a2,2 0 0 1 -2,-2v-8a2,2 0 0 1 2,-2z" />
 </vector>

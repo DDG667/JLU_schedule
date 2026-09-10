@@ -195,12 +195,18 @@ class SettingsFragment : Fragment() {
             AppPreferences.setDefaultOpenPage(requireContext(), page)
         }
 
+        val themeMonet = view.findViewById<View>(R.id.themeMonet)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            themeMonet.visibility = View.GONE
+        }
+
         bindSegment(
             view.findViewById(R.id.themeGroup),
             palette,
             when (AppPreferences.getThemeColor(requireContext())) {
                 AppPreferences.THEME_OCEAN -> R.id.themeOcean
                 AppPreferences.THEME_MINT -> R.id.themeMint
+                AppPreferences.THEME_MONET -> R.id.themeMonet
                 else -> R.id.themeWarm
             }
         ) { id ->
@@ -209,6 +215,7 @@ class SettingsFragment : Fragment() {
                 when (id) {
                     R.id.themeOcean -> AppPreferences.THEME_OCEAN
                     R.id.themeMint -> AppPreferences.THEME_MINT
+                    R.id.themeMonet -> AppPreferences.THEME_MONET
                     else -> AppPreferences.THEME_WARM
                 }
             )
