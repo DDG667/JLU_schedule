@@ -99,12 +99,20 @@ object ScheduleBackupCodec {
 
     private fun BackupMeeting.toMeetingTime(): MeetingTime {
         return MeetingTime(
-            weekday = runCatching { Weekday.valueOf(weekday) }.getOrDefault(Weekday.MONDAY),
+            weekday = parseWeekday(weekday),
             startSection = startSection,
             endSection = endSection,
             weekRules = weekRules.map { it.toWeekRule() },
             location = location
         )
+    }
+
+    private fun parseWeekday(raw: String): Weekday {
+        val intVal = raw.trim().toIntOrNull()
+        if (intVal != null && intVal in 1..Weekday.entries.size) {
+            return Weekday.entries[intVal - 1]
+        }
+        return runCatching { Weekday.valueOf(raw.trim().uppercase()) }.getOrDefault(Weekday.MONDAY)
     }
 
     private fun MeetingTime.toBackupMeeting(): BackupMeeting {
@@ -121,8 +129,12 @@ object ScheduleBackupCodec {
         return WeekRule(
             startWeek = startWeek,
             endWeek = endWeek,
-            parity = runCatching { WeekParity.valueOf(parity) }.getOrDefault(WeekParity.ALL)
+            parity = parseWeekParity(parity)
         )
+    }
+
+    private fun parseWeekParity(raw: String): WeekParity {
+        return runCatching { WeekParity.valueOf(raw.trim().uppercase()) }.getOrDefault(WeekParity.ALL)
     }
 
     private fun WeekRule.toBackupWeekRule(): BackupWeekRule {

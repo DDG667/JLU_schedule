@@ -39,6 +39,7 @@ data class GpaCourse(
 }
 
 /** 教务系统导入的一条成绩记录（金智 xscjcx.do 的常用字段） */
+@Serializable
 data class ImportedGrade(
     /** 课程号（KCH），重修去重的主键；缺失时退化为 课程名+学期 */
     val courseCode: String = "",
@@ -163,16 +164,20 @@ object GpaCalculator {
     private fun importedEffectiveScore(grade: ImportedGrade): Double {
         val asNumber = grade.scoreText.toDoubleOrNull()
         return when {
-            asNumber != null && asNumber >= MIN_SCORE && asNumber <= MAX_SCORE -> asNumber
+            asNumber != null && asNumber.isFinite() && asNumber >= MIN_SCORE && asNumber <= MAX_SCORE -> asNumber
             else -> LEVEL_SCORES[grade.scoreText] ?: -1.0
         }
     }
 
     private fun ImportedGrade.toGpaCourse(): GpaCourse? {
         val asNumber = scoreText.toDoubleOrNull()
-        val id = "jw-$courseCode-$semesterCode"
+        val id = if (courseCode.isNotBlank()) {
+            "jw-$courseCode-$semesterCode"
+        } else {
+            "jw-${name.hashCode()}-$semesterCode"
+        }
         return when {
-            asNumber != null && asNumber >= MIN_SCORE && asNumber <= MAX_SCORE -> GpaCourse(
+            asNumber != null && asNumber.isFinite() && asNumber >= MIN_SCORE && asNumber <= MAX_SCORE -> GpaCourse(
                 id = id,
                 name = name,
                 gradeType = GpaGradeType.PERCENT,

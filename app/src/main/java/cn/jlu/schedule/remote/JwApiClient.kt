@@ -23,18 +23,15 @@ object JwApiClient {
     @Volatile
     private var cached: OkHttpClient? = null
 
+    @Volatile
+    private var cachedCookieJar: CampusCookieJar? = null
+
     fun get(context: Context): OkHttpClient {
         return cached ?: synchronized(this) {
             cached ?: OkHttpClient.Builder()
                 .cookieJar(cookieJar(context))
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(20, TimeUnit.SECONDS)
-                .sslSocketFactory(trustingSslContext().socketFactory, trustingTrustManager())
-                .hostnameVerifier { hostname, _ ->
-                    // 校园站点使用私有 CA 证书（网页导入时用户已确认信任），
-                    // 原生请求仅对 *.jlu.edu.cn 沿用该信任决策，其余主机一律拒绝
-                    hostname?.endsWith(CampusCookieJar.ALLOWED_DOMAIN_SUFFIX, ignoreCase = true) == true
-                }
                 .addInterceptor { chain ->
                     chain.proceed(
                         chain.request().newBuilder()
@@ -47,22 +44,12 @@ object JwApiClient {
         }
     }
 
-    private fun trustingSslContext(): javax.net.ssl.SSLContext {
-        return javax.net.ssl.SSLContext.getInstance("TLS").apply {
-            init(null, arrayOf<javax.net.ssl.TrustManager>(trustingTrustManager()), java.security.SecureRandom())
+    fun cookieJar(context: Context): CampusCookieJar {
+        return cachedCookieJar ?: synchronized(this) {
+            cachedCookieJar ?: CampusCookieJar(File(context.applicationContext.filesDir, "auth/cookies.json"))
+                .also { cachedCookieJar = it }
         }
     }
-
-    private fun trustingTrustManager(): javax.net.ssl.X509TrustManager {
-        return object : javax.net.ssl.X509TrustManager {
-            override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) = Unit
-            override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) = Unit
-            override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
-        }
-    }
-
-    fun cookieJar(context: Context): CampusCookieJar =
-        CampusCookieJar(File(context.filesDir, "auth/cookies.json"))
 
     /**
      * 把 WebView CookieManager 中目标域名的会话迁移进原生 CookieJar（首次登录后调用）。
@@ -79,7 +66,9 @@ object JwApiClient {
     private val WEBVIEW_IMPORT_URLS = listOf(
         TpassConfig.IEDU_PORTAL_URL,
         "https://iedu.jlu.edu.cn/jwapp/sys/wdkb/*default/index.do",
+        "https://iedu.jlu.edu.cn/jwapp/sys/wdkb/modules/xskcb/cxxszhxqkb.do",
         "https://iedu.jlu.edu.cn/jwapp/sys/cjcx/*default/index.do",
+        "https://iedu.jlu.edu.cn/jwapp/sys/cjcx/modules/cjcx/xscjcx.do",
         TpassConfig.CAS_LOGIN_URL
     )
 
@@ -105,6 +94,13 @@ object JwApiClient {
         return CasClient(get(context)).login(credentials.studentId, credentials.password)
     }
 
+    /** 校验业务会话；失效时只尝试一次已保存凭据的静默登录。 */
+    suspend fun ensureSession(context: Context): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        if (probeIeduSession(context)) return@withContext true
+        if (silentLogin(context) !is CasLoginResult.Success) return@withContext false
+        probeIeduSession(context)
+    }
+
     /** 原生 CookieJar → WebView CookieManager（静默重登后 WebView 才能带上新会话） */
     fun syncJarToWebView(context: Context) {
         val manager = CookieManager.getInstance()
@@ -113,12 +109,25 @@ object JwApiClient {
             TpassConfig.CAS_LOGIN_URL,
             TpassConfig.IEDU_PORTAL_URL,
             "https://iedu.jlu.edu.cn/jwapp/sys/wdkb/*default/index.do",
-            "https://iedu.jlu.edu.cn/jwapp/sys/cjcx/*default/index.do"
+            "https://iedu.jlu.edu.cn/jwapp/sys/wdkb/modules/xskcb/cxxszhxqkb.do",
+            "https://iedu.jlu.edu.cn/jwapp/sys/cjcx/*default/index.do",
+            "https://iedu.jlu.edu.cn/jwapp/sys/cjcx/modules/cjcx/xscjcx.do",
+            "https://iedu.jlu.edu.cn/jwapp/sys/wdkb/modules/xskcb/cxxskcbbjfb.do"
         ).forEach { target ->
             val httpUrl = runCatching { target.toHttpUrl() }.getOrNull() ?: return@forEach
             runCatching {
                 jar.loadForRequest(httpUrl).forEach { cookie ->
-                    manager.setCookie("https://${cookie.domain}${cookie.path}", cookie.toString())
+                    val domainClean = cookie.domain.removePrefix(".")
+                    val base = "https://$domainClean"
+                    manager.setCookie("$base${cookie.path}", cookie.toString())
+                    if (domainClean == TpassConfig.IEDU_HOST) {
+                        manager.setCookie("$base/", cookie.toString())
+                        manager.setCookie("$base/jwapp/", cookie.toString())
+                        manager.setCookie("$base/jwapp/sys/wdkb/", cookie.toString())
+                        manager.setCookie("$base/jwapp/sys/wdkb/modules/xskcb/", cookie.toString())
+                        manager.setCookie("$base/jwapp/sys/cjcx/", cookie.toString())
+                        manager.setCookie("$base/jwapp/sys/cjcx/modules/cjcx/", cookie.toString())
+                    }
                 }
             }
         }
@@ -126,8 +135,12 @@ object JwApiClient {
     }
 
     /** 清空会话（登出） */
-    fun clearSession(context: Context) {
+    fun clearSession(context: Context, onComplete: (() -> Unit)? = null) {
         cookieJar(context).clear()
+        CookieManager.getInstance().removeAllCookies {
+            CookieManager.getInstance().flush()
+            onComplete?.invoke()
+        }
     }
 
     /** iedu 域是否还有可用会话 Cookie（用于设置页状态展示） */
@@ -150,5 +163,143 @@ object JwApiClient {
                 response.request.url.host == TpassConfig.IEDU_HOST && response.isSuccessful
             }
         }.getOrDefault(false)
+    }
+
+    private fun getCompleteCookieHeader(context: Context): String {
+        val cookieMap = LinkedHashMap<String, String>()
+
+        // 1. 从原生持久化 CookieJar 读取已有 Cookie
+        runCatching {
+            cookieJar(context).getAllCookies().filter { it.domain.contains("jlu.edu.cn") }.forEach {
+                if (it.name.isNotBlank() && it.value.isNotBlank()) {
+                    cookieMap[it.name] = it.value
+                }
+            }
+        }
+
+        // 2. 从 WebView CookieManager 读取各层级 URL 的最新 Cookie（按名覆盖/补充）
+        runCatching {
+            val manager = android.webkit.CookieManager.getInstance()
+            val probeUrls = listOf(
+                "https://iedu.jlu.edu.cn/",
+                "https://iedu.jlu.edu.cn/jwapp/",
+                "https://iedu.jlu.edu.cn/jwapp/sys/cjcx/",
+                "https://iedu.jlu.edu.cn/jwapp/sys/cjcx/*default/index.do",
+                "https://iedu.jlu.edu.cn/jwapp/sys/cjcx/modules/cjcx/xscjcx.do"
+            )
+            for (u in probeUrls) {
+                val raw = manager.getCookie(u) ?: continue
+                raw.split(";").forEach { part ->
+                    val pair = part.trim()
+                    val eq = pair.indexOf('=')
+                    if (eq > 0) {
+                        val k = pair.substring(0, eq).trim()
+                        val v = pair.substring(eq + 1).trim()
+                        if (k.isNotEmpty() && v.isNotEmpty()) {
+                            cookieMap[k] = v
+                        }
+                    }
+                }
+            }
+        }
+
+        return cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" }
+    }
+
+    /**
+     * 原生直接拉取全量学期成绩（不经过慢速 WebView 渲染，极速返回历年所有课程）
+     */
+    suspend fun fetchAllGrades(context: Context): List<cn.jlu.schedule.domain.ImportedGrade> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        importAllWebViewCookies(context)
+        var grades = queryGradesInternal(context)
+        if (grades.isEmpty()) {
+            val relogin = silentLogin(context)
+            if (relogin is CasLoginResult.Success) {
+                syncJarToWebView(context)
+                grades = queryGradesInternal(context)
+            }
+        }
+        grades
+    }
+
+    private fun queryGradesInternal(context: Context): List<cn.jlu.schedule.domain.ImportedGrade> {
+        val cookieHeader = getCompleteCookieHeader(context)
+        android.util.Log.i("JwApiClient", "queryGradesInternal: cookieHeader size=${cookieHeader.length}")
+        if (cookieHeader.isBlank()) return emptyList()
+
+        // 使用无 CookieJar 拦截的 OkHttpClient，直接由 header 传递精确的 Cookie 集合，避免由于 path 匹配规则过滤掉重要子路径 Cookie
+        val directClient = get(context).newBuilder()
+            .cookieJar(okhttp3.CookieJar.NO_COOKIES)
+            .followRedirects(false)
+            .build()
+
+        val defaultQuery = """[{"name":"SFYX","caption":"是否有效","linkOpt":"AND","builderList":"cbl_m_List","builder":"m_value_equal","value":"1","value_display":"是"},{"name":"SHOWMAXCJ","caption":"显示最高成绩","linkOpt":"AND","builderList":"cbl_m_List","builder":"m_value_equal","value":"0","value_display":"否"}]"""
+        val formBody = okhttp3.FormBody.Builder()
+            .add("querySetting", defaultQuery)
+            .add("*order", "-XNXQDM,-KCH,-KXH")
+            .add("pageSize", "1000")
+            .add("pageNumber", "1")
+            .build()
+
+        val request = okhttp3.Request.Builder()
+            .url("https://iedu.jlu.edu.cn/jwapp/sys/cjcx/modules/cjcx/xscjcx.do")
+            .header("Referer", "https://iedu.jlu.edu.cn/jwapp/sys/cjcx/*default/index.do")
+            .header("X-Requested-With", "XMLHttpRequest")
+            .header("Accept", "application/json, text/javascript, */*; q=0.01")
+            .header("User-Agent", TpassConfig.USER_AGENT)
+            .header("Cookie", cookieHeader)
+            .post(formBody)
+            .build()
+
+        val res = runCatching {
+            directClient.newCall(request).execute().use { response ->
+                val code = response.code
+                val body = response.body?.string().orEmpty()
+                android.util.Log.i("JwApiClient", "queryGradesInternal code=$code, bodyLength=${body.length}")
+                if (code in 200..299 && cn.jlu.schedule.parser.GradeTranscriptParser.isLikelyGradePayload(body)) {
+                    val list = cn.jlu.schedule.parser.GradeTranscriptParser.parse(body)
+                    android.util.Log.i("JwApiClient", "queryGradesInternal parsed ${list.size} courses")
+                    list
+                } else {
+                    android.util.Log.w("JwApiClient", "queryGradesInternal not valid grade payload: ${body.take(200)}")
+                    null
+                }
+            }
+        }.onFailure {
+            android.util.Log.e("JwApiClient", "queryGradesInternal execution error", it)
+        }.getOrNull()
+
+        if (!res.isNullOrEmpty()) {
+            return res.distinctBy { "${it.semesterCode}_${it.courseCode}_${it.name}" }
+                .sortedWith(compareByDescending<cn.jlu.schedule.domain.ImportedGrade> { it.semesterCode }.thenBy { it.courseCode })
+        }
+
+        // 兜底：若带条件查询返回空，尝试 querySetting = [] 无条件全量查询
+        val fallbackBody = okhttp3.FormBody.Builder()
+            .add("querySetting", "[]")
+            .add("*order", "-XNXQDM,-KCH,-KXH")
+            .add("pageSize", "1000")
+            .add("pageNumber", "1")
+            .build()
+
+        val fallbackReq = request.newBuilder().post(fallbackBody).build()
+        val fallbackRes = runCatching {
+            directClient.newCall(fallbackReq).execute().use { response ->
+                val code = response.code
+                val body = response.body?.string().orEmpty()
+                android.util.Log.i("JwApiClient", "queryGradesInternal fallback code=$code, bodyLength=${body.length}")
+                if (code in 200..299 && cn.jlu.schedule.parser.GradeTranscriptParser.isLikelyGradePayload(body)) {
+                    val list = cn.jlu.schedule.parser.GradeTranscriptParser.parse(body)
+                    android.util.Log.i("JwApiClient", "queryGradesInternal fallback parsed ${list.size} courses")
+                    list
+                } else null
+            }
+        }.onFailure {
+            android.util.Log.e("JwApiClient", "queryGradesInternal fallback error", it)
+        }.getOrNull()
+
+        return fallbackRes.orEmpty()
+            .distinctBy { "${it.semesterCode}_${it.courseCode}_${it.name}" }
+            .sortedWith(compareByDescending<cn.jlu.schedule.domain.ImportedGrade> { it.semesterCode }.thenBy { it.courseCode })
     }
 }

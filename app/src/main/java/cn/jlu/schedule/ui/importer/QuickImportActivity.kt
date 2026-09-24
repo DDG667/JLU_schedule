@@ -27,6 +27,7 @@ import cn.jlu.schedule.data.ScheduleRepository
 import cn.jlu.schedule.parser.ScheduleImportCacheParser
 import cn.jlu.schedule.remote.AutoImportCoordinator
 import cn.jlu.schedule.remote.JwApiClient
+import cn.jlu.schedule.remote.ScheduleRemoteSource
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import cn.jlu.schedule.ui.auth.LoginActivity
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
@@ -106,8 +107,33 @@ class QuickImportActivity : AppCompatActivity() {
         webView = findViewById(R.id.quickWebView)
         setupWebView()
 
+        // 预先把已有 Cookie 同步进 WebView
+        JwApiClient.importAllWebViewCookies(this)
+        JwApiClient.syncJarToWebView(this)
+
         scheduleTimeoutWatchdog()
+
+        // 优先尝试原生极速拉取；若已有可用会话直接秒级入库
+        tryNativeDirectFetch()
+
         webView.loadUrl(SCHEDULE_API_URL)
+    }
+
+    private fun tryNativeDirectFetch() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val res = ScheduleRemoteSource.fetchScheduleNative(this@QuickImportActivity)
+            res.onSuccess { fetches ->
+                if (handled.get() || fetches.isEmpty()) return@onSuccess
+                Log.i(TAG, "direct native schedule fetch ok: ${fetches.size} payloads")
+                withContext(Dispatchers.Main) {
+                    fetches.forEach { fetch ->
+                        onPayloadCaptured(fetch.finalUrl, fetch.json)
+                    }
+                }
+            }.onFailure {
+                Log.w(TAG, "direct native schedule fetch failed: ${it.message}, fallback to webview")
+            }
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -115,6 +141,11 @@ class QuickImportActivity : AppCompatActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
+            databaseEnabled = true
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            userAgentString = TpassConfig.USER_AGENT
+            mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         }
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
@@ -131,26 +162,21 @@ class QuickImportActivity : AppCompatActivity() {
                 if (handled.get() || !request.isForMainFrame) return null
                 val url = request.url
                 if (url.host != TpassConfig.IEDU_HOST || request.method != "GET") return null
-                if (!url.encodedPath?.endsWith(".do")!!) return null
+                if (url.encodedPath?.endsWith(".do") != true) return null
                 return runCatching { buildHookedDocumentResponse(url) }
                     .onFailure { Log.w(TAG, "intercept failed: ${it.message}") }
                     .getOrNull()
             }
 
             override fun onReceivedSslError(view: WebView, handler: android.webkit.SslErrorHandler, error: android.net.http.SslError) {
-                // 教务/认证站点使用校园私有 CA 证书（手动网页导入时用户已确认信任），
-                // 自动化流程对同域主机沿用该信任决策，其余域维持拒绝
-                val host = runCatching { android.net.Uri.parse(error.url ?: "").host ?: "" }.getOrDefault("")
-                if (host.endsWith(CampusCookieJar.ALLOWED_DOMAIN_SUFFIX, ignoreCase = true)) {
-                    Log.w(TAG, "ssl error tolerated for $host: ${error.primaryError}")
-                    handler.proceed()
-                } else {
-                    handler.cancel()
-                }
+                handler.cancel()
             }
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                view.loadUrl(request.url.toString())
+                val url = request.url.toString()
+                if (url.startsWith("http://") || url.startsWith("https://")) {
+                    return false
+                }
                 return true
             }
 
@@ -202,27 +228,13 @@ class QuickImportActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val result = JwApiClient.silentLogin(this@QuickImportActivity)
             if (result is cn.jlu.schedule.auth.CasLoginResult.Success) {
-                syncCookiesBackToWebView()
+                JwApiClient.syncJarToWebView(this@QuickImportActivity)
+                tryNativeDirectFetch()
                 if (!handled.get()) webView.loadUrl(SCHEDULE_API_URL)
             } else {
                 needManualLogin()
             }
         }
-    }
-
-    /** 原生 CookieJar → WebView CookieManager（静默重登后 WebView 才能带上新会话） */
-    private fun syncCookiesBackToWebView() {
-        val manager = CookieManager.getInstance()
-        val jar = JwApiClient.cookieJar(this)
-        listOf(TpassConfig.CAS_LOGIN_URL, TpassConfig.IEDU_PORTAL_URL).forEach { target ->
-            val httpUrl = runCatching { target.toHttpUrl() }.getOrNull() ?: return@forEach
-            runCatching {
-                jar.loadForRequest(httpUrl).forEach { cookie ->
-                    manager.setCookie("https://${cookie.domain}${cookie.path}", cookie.toString())
-                }
-            }
-        }
-        manager.flush()
     }
 
     private fun injectCaptureHook(view: WebView) {
@@ -238,11 +250,6 @@ class QuickImportActivity : AppCompatActivity() {
         connection.connectTimeout = 15000
         connection.readTimeout = 20000
         connection.instanceFollowRedirects = true
-        if (target.host?.endsWith(CampusCookieJar.ALLOWED_DOMAIN_SUFFIX, ignoreCase = true) == true) {
-            // 私有 CA 证书：仅对校园域放行（与 WebView 侧 SSL 白名单一致）
-            connection.sslSocketFactory = trustingSslContext().socketFactory
-            connection.setHostnameVerifier(javax.net.ssl.HostnameVerifier { _, _ -> true })
-        }
         CookieManager.getInstance().getCookie(target.toString())?.let {
             connection.setRequestProperty("Cookie", it)
         }
@@ -250,17 +257,31 @@ class QuickImportActivity : AppCompatActivity() {
         connection.setRequestProperty("Referer", TpassConfig.IEDU_PORTAL_URL)
         connection.connect()
         val mimeType = connection.contentType?.substringBefore(';')?.trim() ?: "text/html"
-        val body = connection.inputStream.use { it.readBytes() }
+        val responseCode = connection.responseCode
+        val stream = if (responseCode in 200..299) connection.inputStream else (connection.errorStream ?: connection.inputStream)
+        val body = stream.use { it.readBytes() }
         val headers = connection.headerFields
             ?.filterKeys { key -> key != null && !key.equals("Content-Length", true) && !key.equals("Content-Type", true) && !key.equals("Set-Cookie", true) }
             ?.mapValues { entry -> entry.value.joinToString(", ") }
-        Log.i(TAG, "intercepted main doc $target -> ${connection.responseCode} $mimeType len=${body.size}")
+        Log.i(TAG, "intercepted main doc $target -> $responseCode $mimeType len=${body.size}")
+
+        // 把可能附带的 Set-Cookie 回写到 CookieManager
+        connection.headerFields?.get("Set-Cookie")?.forEach { cookieVal ->
+            CookieManager.getInstance().setCookie(target.toString(), cookieVal)
+        }
+
+        val text = String(body, Charsets.UTF_8)
+        if (ScheduleImportCacheParser.looksLikeSchedulePayload(target.toString(), text, text.length.toLong())) {
+            Log.i(TAG, "schedule payload directly intercepted from doc: ${text.length} bytes")
+            runOnUiThread { onPayloadCaptured(target.toString(), text) }
+        }
+
         if (!mimeType.contains("html", ignoreCase = true)) {
             return WebResourceResponse(mimeType, "UTF-8", body.inputStream()).apply {
                 responseHeaders = headers
             }
         }
-        var html = String(body, Charsets.UTF_8)
+        var html = text
         if (html.contains("id=\"loginForm\"") || html.contains("id=\"lt\"")) {
             Log.i(TAG, "served doc is CAS login page ($target), will trigger silent relogin")
             casLoginHtmlServed = true
@@ -296,20 +317,6 @@ class QuickImportActivity : AppCompatActivity() {
         }, 2500)
     }
 
-    private fun trustingSslContext(): javax.net.ssl.SSLContext {
-        return javax.net.ssl.SSLContext.getInstance("TLS").apply {
-            init(
-                null,
-                arrayOf(object : javax.net.ssl.X509TrustManager {
-                    override fun checkClientTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {}
-                    override fun checkServerTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {}
-                    override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
-                }),
-                java.security.SecureRandom()
-            )
-        }
-    }
-
     private inner class Bridge {
         @JavascriptInterface
         fun onDebug(text: String?) {
@@ -342,11 +349,12 @@ class QuickImportActivity : AppCompatActivity() {
         }
         Log.i(TAG, "captured schedule payload #${indexCounter} (${text.length} bytes)")
         showMessage(getString(R.string.import_quick_progress_import))
-        // 滚动静默期：页面可能分多次查询不同视图（周视图/整学期），每收到新捕获就重置
-        // 计时，静默满后统一交给解析器合并同学期批次，避免只拿到部分数据导致缺课
+        // 滚动静默期：页面可能分多次查询不同视图（周视图/整学期），每收到新捕获就重置计时
+        // 捕获到 2+ 个载荷时缩短静默至 1.2 秒以迅速收口入库，避免用户面对转圈等待
         importJob?.cancel()
         importJob = lifecycleScope.launch {
-            delay(CAPTURE_QUIET_MS)
+            val quietMs = if (capturedFiles.size >= 2) 1200L else CAPTURE_QUIET_MS
+            delay(quietMs)
             if (handled.get()) return@launch
             importAll()
         }
@@ -390,6 +398,7 @@ class QuickImportActivity : AppCompatActivity() {
         handled.set(true)
         progress.visibility = View.GONE
         showMessage("登录已过期，请先登录校园账号")
+        actionLogin.isEnabled = true
         actionLogin.visibility = View.VISIBLE
     }
 
@@ -414,10 +423,15 @@ class QuickImportActivity : AppCompatActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_LOGIN && resultCode == RESULT_OK && !handled.get()) {
+        if (requestCode == REQ_LOGIN && resultCode == RESULT_OK) {
             silentLoginTried = false
             handled.set(false)
+            importStarted.set(false)
             progress.visibility = View.VISIBLE
+            actionLogin.visibility = View.GONE
+            JwApiClient.importAllWebViewCookies(this)
+            JwApiClient.syncJarToWebView(this)
+            tryNativeDirectFetch()
             webView.loadUrl(SCHEDULE_API_URL)
         }
     }

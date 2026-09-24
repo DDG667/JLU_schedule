@@ -66,4 +66,23 @@ class ScheduleBackupCodecTest {
         assertNotNull(profiles)
         assertTrue(profiles!!.isEmpty())
     }
+
+    @Test
+    fun toCourseSchedule_parsesNumericAndTextWeekdays() {
+        val backupCourse = ScheduleBackupCodec.BackupCourse(
+            courseName = "跨平台课",
+            meetings = listOf(
+                ScheduleBackupCodec.BackupMeeting(weekday = "1", startSection = 1, endSection = 2),
+                ScheduleBackupCodec.BackupMeeting(weekday = "3", startSection = 3, endSection = 4),
+                ScheduleBackupCodec.BackupMeeting(weekday = "7", startSection = 5, endSection = 6),
+                ScheduleBackupCodec.BackupMeeting(weekday = "friday", startSection = 7, endSection = 8)
+            )
+        )
+
+        val schedule = with(ScheduleBackupCodec) { backupCourse.toCourseSchedule() }
+        assertEquals(cn.jlu.schedule.model.Weekday.MONDAY, schedule.meetings[0].weekday)
+        assertEquals(cn.jlu.schedule.model.Weekday.WEDNESDAY, schedule.meetings[1].weekday)
+        assertEquals(cn.jlu.schedule.model.Weekday.SUNDAY, schedule.meetings[2].weekday)
+        assertEquals(cn.jlu.schedule.model.Weekday.FRIDAY, schedule.meetings[3].weekday)
+    }
 }

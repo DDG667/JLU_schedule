@@ -61,4 +61,11 @@
     <color name="mint_detail_title">#1F4C3A</color>
     <color name="mint_detail_body">#325E4C</color>
     <color name="mint_detail_meta">#5E7F72</color>
+
+    <!-- 弹窗与通用输入框/面板组件色（浅色） -->
+    <color name="dialog_input_background">#FFFDF8</color>
+    <color name="dialog_input_stroke">#E8D8BF</color>
+    <color name="dialog_panel_background">#FFF8ED</color>
+    <color name="dialog_panel_stroke">#F0D8B6</color>
+    <color name="delete_icon_tint">#FF7043</color>
 </resources>

@@ -147,9 +147,29 @@ class GpaCalculatorTest {
         assertEquals(4, courses.size)
         assertEquals(85.0, courses.first { it.name == "数据结构" && it.id == "jw-CS101-2025-2026-1" }.score, 1e-9)
         assertEquals(70.0, courses.first { it.id == "jw-CS102-2025-2026-1" }.score, 1e-9)
-        assertEquals(90.0, courses.first { it.id == "jw--2025-2026-1" }.score, 1e-9)
-        assertEquals(80.0, courses.first { it.id == "jw--2025-2026-2" }.score, 1e-9)
+        assertEquals(90.0, courses.first { it.id == "jw-${"讲座".hashCode()}-2025-2026-1" }.score, 1e-9)
+        assertEquals(80.0, courses.first { it.id == "jw-${"讲座".hashCode()}-2025-2026-2" }.score, 1e-9)
         assertTrue(courses.none { it.name == "缓考课" })
+    }
+
+    @Test
+    fun `merge produces distinct ids for multiple courses without courseCode in same semester`() {
+        val grades = listOf(
+            ImportedGrade(courseCode = "", name = "前沿讲座A", credit = 1.0, scoreText = "90", semesterCode = "2025-2026-1"),
+            ImportedGrade(courseCode = "", name = "前沿讲座B", credit = 1.0, scoreText = "88", semesterCode = "2025-2026-1")
+        )
+        val courses = GpaCalculator.mergeImported(grades)
+        assertEquals(2, courses.size)
+        assertTrue(courses[0].id != courses[1].id)
+    }
+
+    @Test
+    fun `merge rejects NaN score text`() {
+        val grades = listOf(
+            ImportedGrade(courseCode = "CS999", name = "异常课", credit = 1.0, scoreText = "NaN", semesterCode = "2025-2026-1")
+        )
+        val courses = GpaCalculator.mergeImported(grades)
+        assertTrue(courses.isEmpty())
     }
 
     @Test

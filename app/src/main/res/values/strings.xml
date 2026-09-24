@@ -164,4 +164,84 @@
     <string name="gpa_cleared">已清空</string>
     <string name="gpa_excluded_mark">已排除</string>
     <string name="gpa_included_summary">纳入 %1$d 门 · 共 %2$s 学分</string>
+
+    <!-- 成绩查询 -->
+    <string name="tools_grade_inquiry_title">成绩查询</string>
+    <string name="tools_grade_inquiry_hint">查看各学期成绩、单科绩点与加权平均分，支持教务一键同步</string>
+    <string name="grade_inquiry_title">成绩查询</string>
+    <string name="grade_semester_all">全部学期</string>
+    <string name="grade_summary_format">共 %1$d 门课程 · 累计 %2$.1f 学分 · 均分 %3$.2f</string>
+    <string name="grade_empty_hint">暂无成绩数据，点击下方按钮从教务系统同步</string>
+    <string name="grade_sync_button">同步教务成绩</string>
+    <string name="grade_add_button">手动添加成绩</string>
+    <string name="grade_sync_from_gpa">从绩点计算器导入</string>
+    <string name="grade_dialog_title">添加成绩</string>
+    <string name="grade_edit_title">编辑成绩</string>
+    <string name="grade_course_name_hint">课程名称（如：高等数学）</string>
+    <string name="grade_credit_hint">学分（如：3.0 或 2.5）</string>
+    <string name="grade_score_hint">成绩（如：89.5 或 优秀）</string>
+    <string name="grade_semester_hint">学期（如：2025-2026-1）</string>
+    <string name="grade_code_hint">课程代码（选填）</string>
+    <string name="grade_delete_title">删除成绩</string>
+    <string name="grade_delete_message">确定删除「%1$s」的成绩记录吗？</string>
+    <string name="grade_imported_from_gpa">已从绩点计算器导入 %1$d 门成绩</string>
+    <string name="grade_open_web">查看教务原网页</string>
+    <string name="grade_send_to_gpa">转入绩点计算器</string>
+    <string name="grade_syncing">正在同步成绩…</string>
+    <string name="grade_sync_success">已成功同步 %1$d 门成绩</string>
+
+    <!-- 考试查询 -->
+    <string name="tools_exam_schedule_title">考试查询</string>
+    <string name="tools_exam_schedule_hint">期末考场日程、考试地点、座位号及倒计时，支持教务同步与自定义</string>
+    <string name="exam_schedule_title">考试安排</string>
+    <string name="exam_countdown_next">距离下场考试「%1$s」还剩</string>
+    <string name="exam_countdown_days">%1$d 天 %2$d 小时</string>
+    <string name="exam_countdown_hours">%1$d 小时 %2$d 分钟</string>
+    <string name="exam_empty_hint">暂无考试安排，点击下方同步教务考试或手动添加</string>
+    <string name="exam_sync_button">同步教务考试</string>
+    <string name="exam_add_button">手动添加考试</string>
+    <string name="exam_open_web">查看考场原网页</string>
+    <string name="exam_dialog_title">添加考试</string>
+    <string name="exam_course_name_hint">课程名称（如：高等数学）</string>
+    <string name="exam_time_hint">考试时间（如：2026-06-20 08:30-10:30）</string>
+    <string name="exam_location_hint">考场地点（如：逸夫楼第一阶梯）</string>
+    <string name="exam_seat_hint">座位号（如：32号，可留空）</string>
+    <string name="exam_type_hint">考试类型（期末/期中/四六级等）</string>
+
+    <!-- 学业完成查询 -->
+    <string name="tools_academic_progress_title">学业完成查询</string>
+    <string name="tools_academic_progress_hint">培养方案学分达成度、必修/选修/通识学分进度核对与毕业要求估算</string>
+    <string name="academic_progress_title">学业完成情况</string>
+    <string name="academic_total_credits">毕业总学分完成度</string>
+    <string name="academic_credits_summary">已修 %1$.1f / 需修 %2$.1f 学分 (%3$d%%)</string>
+    <string name="academic_auto_calc_button">从成绩自动核算</string>
+    <string name="academic_sync_web_button">从教务系统同步</string>
+    <string name="academic_syncing">正在从培养方案原网页同步学业达成度…</string>
+    <string name="academic_sync_success">已同步培养方案：已修 %1$.1f / 需修 %2$.1f 学分</string>
+    <string name="academic_sync_failed">未抓取到培养方案数据，请点击右上角地球图标打开原网页查看</string>
+    <string name="academic_calc_from_grades_button">从本地成绩估算</string>
+    <string name="academic_edit_plan_button">手动编辑学业指标</string>
+    <string name="academic_add_category_button">＋ 添加自定义模块</string>
+    <string name="academic_dialog_auto_sum">按模块自动求和</string>
+    <string name="academic_open_web">查看培养方案原网页</string>
+    <string name="academic_source_web">来源：教务系统培养方案直同步</string>
+    <string name="academic_source_manual">来源：手动自定义编辑</string>
+    <string name="academic_source_estimated">来源：本地成绩启发式估算（以教务原系统为准）</string>
+    <string name="academic_category_compulsory">学科基础与专业必修</string>
+    <string name="academic_category_elective">专业选修课</string>
+    <string name="academic_category_general">通识教育选修/核心课</string>
+    <string name="academic_category_practice">实践教学与毕业设计</string>
+    <string name="academic_auto_calc_success">已从 %1$d 门通过课程中累计 %2$.1f 学分（启发式分类估算）</string>
+
+    <!-- 智慧教育平台直达 -->
+    <string name="tools_web_direct_title">教务系统快捷直达</string>
+    <string name="tools_web_portal">智慧教育平台门户</string>
+    <string name="tools_web_portal_hint">访问吉大本科生教务大厅</string>
+    <string name="tools_web_grade">成绩查询原网页</string>
+    <string name="tools_web_exam">我的考试安排原网页</string>
+    <string name="tools_web_academic">培养方案与学业完成原网页</string>
+    <!-- 通用操作 -->
+    <string name="action_close">关闭</string>
+    <string name="close">关闭</string>
 </resources>
+

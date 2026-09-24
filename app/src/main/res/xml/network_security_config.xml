@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 校园私有 CA 需由设备所有者安装；其他站点仍只信任系统 CA。 -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">jlu.edu.cn</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

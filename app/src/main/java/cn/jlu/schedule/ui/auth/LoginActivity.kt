@@ -45,10 +45,6 @@ class LoginActivity : AppCompatActivity() {
     @Volatile
     private var capturedPassword: String = ""
 
-    /** 本页面内用户已确认信任的证书异常主机 */
-    private val trustedSslHosts = java.util.Collections.synchronizedSet(mutableSetOf<String>())
-    private val pendingSslHandlers = LinkedHashMap<String, MutableList<android.webkit.SslErrorHandler>>()
-
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,6 +58,11 @@ class LoginActivity : AppCompatActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
+            databaseEnabled = true
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            userAgentString = TpassConfig.USER_AGENT
+            mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         }
         android.webkit.CookieManager.getInstance().apply {
             setAcceptCookie(true)
@@ -70,18 +71,26 @@ class LoginActivity : AppCompatActivity() {
         webView.addJavascriptInterface(CredentialCaptureBridge(), "JluLoginBridge")
         webView.webViewClient = LoginWebViewClient()
 
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (webView.canGoBack()) {
+                    webView.goBack()
+                } else {
+                    finish()
+                }
+            }
+        })
+
+        // 预先把已有 Cookie 写入 WebView
+        JwApiClient.syncJarToWebView(this)
+
         if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState)
         } else {
-            webView.loadUrl(TpassConfig.IEDU_PORTAL_URL)
-        }
-    }
-
-    override fun onBackPressed() {
-        if (webView.canGoBack()) {
-            webView.goBack()
-        } else {
-            super.onBackPressed()
+            // 直接打开 CAS 登录页，service 参数指向智慧教育门户，登录成功后由 CAS 回跳建立会话
+            val loginUrl = "${TpassConfig.CAS_LOGIN_URL}?service=" +
+                java.net.URLEncoder.encode(TpassConfig.IEDU_PORTAL_URL, "UTF-8")
+            webView.loadUrl(loginUrl)
         }
     }
 
@@ -105,51 +114,20 @@ class LoginActivity : AppCompatActivity() {
             handler: android.webkit.SslErrorHandler,
             error: android.net.http.SslError
         ) {
-            // 校园站点使用私有 CA 证书，默认会被 WebView 静默取消导致白屏；
-            // 与网页导入一致的逐主机人工确认，本页面内确认过即记住
-            val host = runCatching {
-                Uri.parse(error.url.orEmpty()).host.orEmpty().lowercase(java.util.Locale.ROOT)
-            }.getOrDefault("")
-            if (host.isBlank() || isDestroyed || isFinishing) {
-                handler.cancel()
-                return
-            }
-            if (trustedSslHosts.contains(host)) {
-                handler.proceed()
-                return
-            }
-            val alreadyPending = synchronized(pendingSslHandlers) {
-                val existing = pendingSslHandlers[host]
-                if (existing != null) {
-                    existing.add(handler)
-                    true
-                } else {
-                    pendingSslHandlers[host] = mutableListOf(handler)
-                    false
-                }
-            }
-            if (alreadyPending) return
-            androidx.appcompat.app.AlertDialog.Builder(this@LoginActivity)
-                .setTitle("证书校验提醒")
-                .setMessage(
-                    "当前站点证书校验失败：$host\n是否继续访问？\n\n" +
-                        "继续访问存在被窃听的风险，请确认你正在使用校内网或学校官方 VPN 入口。"
-                )
-                .setPositiveButton("继续") { _, _ -> resolveSslHandlers(host, proceed = true) }
-                .setNegativeButton("取消") { _, _ -> resolveSslHandlers(host, proceed = false) }
-                .setCancelable(false)
-                .show()
-        }
-
-        private fun resolveSslHandlers(host: String, proceed: Boolean) {
-            val handlers = synchronized(pendingSslHandlers) { pendingSslHandlers.remove(host) }
-            if (proceed) trustedSslHosts.add(host)
-            handlers?.forEach { if (proceed) it.proceed() else it.cancel() }
+            handler.cancel()
         }
 
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-            view.loadUrl(request.url.toString())
-            return true
+            val url = request.url.toString()
+            if (url.startsWith("http://") || url.startsWith("https://")) {
+                return false
+            }
+            return try {
+                startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, request.url))
+                true
+            } catch (e: Exception) {
+                true
+            }
         }
 
         override fun onPageFinished(view: WebView, url: String) {
@@ -218,8 +196,7 @@ class LoginActivity : AppCompatActivity() {
         // 必须用原生会话实测教务应用可达，才算登录成功
         if (!finished.compareAndSet(false, true)) return true
         lifecycleScope.launch {
-            JwApiClient.importWebViewCookies(this@LoginActivity, TpassConfig.IEDU_PORTAL_URL)
-            JwApiClient.importWebViewCookies(this@LoginActivity, TpassConfig.CAS_LOGIN_URL)
+            JwApiClient.importAllWebViewCookies(this@LoginActivity)
             val valid = withContext(Dispatchers.IO) { JwApiClient.probeIeduSession(this@LoginActivity) }
             if (valid) {
                 saveCapturedCredentialsIfRequested()

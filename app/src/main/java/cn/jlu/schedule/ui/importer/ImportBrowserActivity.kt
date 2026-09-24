@@ -29,6 +29,7 @@ import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.data.ImportedScheduleStorage
 import cn.jlu.schedule.data.ScheduleRepository
 import cn.jlu.schedule.parser.ScheduleImportCacheParser
+import cn.jlu.schedule.remote.JwApiClient
 import cn.jlu.schedule.remote.JwEndpoints
 import cn.jlu.schedule.ui.theme.ThemePalette
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
@@ -67,19 +68,7 @@ class ImportBrowserActivity : AppCompatActivity() {
     private val pendingCacheWrites = AtomicInteger(0)
     private val cacheWriteMonitor = Object()
     private var cachedUserAgent: String = "Mozilla/5.0"
-    private val trustedSslHosts = Collections.synchronizedSet(mutableSetOf<String>())
-    private val pendingSslHandlers = LinkedHashMap<String, MutableList<SslErrorHandler>>()
     private lateinit var palette: ThemePalette
-
-    private fun resolveSslHandlers(host: String, proceed: Boolean) {
-        val handlers = synchronized(pendingSslHandlers) { pendingSslHandlers.remove(host) }
-        if (proceed) {
-            trustedSslHosts.add(host)
-        }
-        handlers?.forEach { handler ->
-            runCatching { if (proceed) handler.proceed() else handler.cancel() }
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         ThemePaletteProvider.applyNightMode(this)
@@ -122,6 +111,9 @@ class ImportBrowserActivity : AppCompatActivity() {
             return
         }
 
+        // 预先把已有 Cookie 同步进 WebView
+        JwApiClient.syncJarToWebView(this)
+
         urlInput.setText(startUrl)
         webView.loadUrl(startUrl)
 
@@ -158,9 +150,13 @@ class ImportBrowserActivity : AppCompatActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
+            databaseEnabled = true
+            useWideViewPort = true
+            loadWithOverviewMode = true
             allowFileAccess = true
             loadsImagesAutomatically = true
-            mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            userAgentString = cn.jlu.schedule.auth.TpassConfig.USER_AGENT
+            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             javaScriptCanOpenWindowsAutomatically = true
         }
         cachedUserAgent = webView.settings.userAgentString.orEmpty().ifBlank { "Mozilla/5.0" }
@@ -181,11 +177,15 @@ class ImportBrowserActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val target = request?.url?.toString().orEmpty()
-                if (target.isNotBlank()) {
-                    view?.loadUrl(target)
-                    return true
+                if (target.startsWith("http://") || target.startsWith("https://")) {
+                    return false
                 }
-                return false
+                return try {
+                    view?.context?.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, request?.url))
+                    true
+                } catch (e: Exception) {
+                    true
+                }
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -210,48 +210,7 @@ class ImportBrowserActivity : AppCompatActivity() {
 
             @SuppressLint("WebViewClientOnReceivedSslError")
             override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
-                val safeHandler = handler ?: return
-                val host = runCatching { Uri.parse(error?.url.orEmpty()).host.orEmpty().lowercase(Locale.ROOT) }
-                    .getOrDefault("")
-                if (host.isBlank() || isDestroyed || isFinishing) {
-                    safeHandler.cancel()
-                    return
-                }
-
-                // 本会话内用户已确认过的主机直接放行
-                if (trustedSslHosts.contains(host)) {
-                    safeHandler.proceed()
-                    return
-                }
-
-                // 同一主机同时报错时聚合到一个对话框，由用户逐主机确认
-                val alreadyPending = synchronized(pendingSslHandlers) {
-                    val existing = pendingSslHandlers[host]
-                    if (existing != null) {
-                        existing.add(safeHandler)
-                    } else {
-                        pendingSslHandlers[host] = mutableListOf(safeHandler)
-                    }
-                    existing != null
-                }
-                if (alreadyPending) {
-                    return
-                }
-
-                AlertDialog.Builder(this@ImportBrowserActivity)
-                    .setTitle("证书校验提醒")
-                    .setMessage(
-                        "当前站点证书校验失败：$host\n是否继续访问？\n\n" +
-                            "继续访问存在被窃听的风险，请确认你正在使用校内网或学校官方 VPN 入口。"
-                    )
-                    .setPositiveButton("继续") { _, _ -> resolveSslHandlers(host, proceed = true) }
-                    .setNegativeButton("取消") { _, _ -> resolveSslHandlers(host, proceed = false) }
-                    .setCancelable(false)
-                    .create()
-                    .also { dialog ->
-                        dialog.show()
-                        styleDialogButtons(dialog)
-                    }
+                handler?.cancel()
             }
 
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): android.webkit.WebResourceResponse? {
@@ -287,6 +246,14 @@ class ImportBrowserActivity : AppCompatActivity() {
         if (method != "GET" && method != "HEAD") {
             return
         }
+
+        // 仅抓取动态数据接口（.do、.json 或课表相关），跳过字体、图片与样式等静态资源，避免并发拉取触发防火墙限流
+        val path = request.url.path.orEmpty().lowercase(Locale.ROOT)
+        val isDataEndpoint = path.endsWith(".do") || path.endsWith(".json") || ScheduleImportCacheParser.isLikelyScheduleUrl(url)
+        if (!isDataEndpoint) {
+            return
+        }
+
         val key = "$method|$url"
         if (!cachedRequestKeys.add(key)) {
             return

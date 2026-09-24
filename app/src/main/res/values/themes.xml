@@ -188,4 +188,20 @@
         <item name="android:layout_marginStart">10dp</item>
         <item name="android:textSize">14sp</item>
     </style>
+
+    <style name="SettingsPrimaryButton" parent="Widget.AppCompat.Button">
+        <item name="android:layout_height">46dp</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:backgroundTint">?attr/colorPrimary</item>
+    </style>
+
+    <style name="SettingsSecondaryButton" parent="Widget.AppCompat.Button">
+        <item name="android:layout_height">46dp</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">14sp</item>
+    </style>
 </resources>
+
+

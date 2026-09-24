@@ -19,6 +19,7 @@ object UiFeedback {
     }
 
     fun stylePrimaryButton(button: Button, palette: ThemePalette) {
+        button.backgroundTintList = null
         button.background = roundedDrawable(
             fillColor = palette.buttonBackground,
             strokeColor = ColorUtils.blendARGB(palette.buttonBackground, palette.iconTint, 0.25f)
@@ -31,6 +32,7 @@ object UiFeedback {
     }
 
     fun styleSecondaryButton(button: Button, palette: ThemePalette) {
+        button.backgroundTintList = null
         button.background = roundedDrawable(
             fillColor = palette.panelAltBackground,
             strokeColor = ColorUtils.blendARGB(palette.panelAltBackground, palette.iconTint, 0.35f)
@@ -43,16 +45,31 @@ object UiFeedback {
     }
 
     fun styleDangerButton(button: Button, palette: ThemePalette) {
-        val danger = ColorUtils.blendARGB(0xFFD35454.toInt(), palette.buttonBackground, 0.45f)
+        button.backgroundTintList = null
+        val danger = if (palette.isDark) {
+            ColorUtils.blendARGB(0xFF8B2525.toInt(), palette.panelBackground, 0.45f)
+        } else {
+            ColorUtils.blendARGB(0xFFD35454.toInt(), palette.buttonBackground, 0.45f)
+        }
+        val textColor = if (palette.isDark) 0xFFEF9A9A.toInt() else 0xFFFFFFFF.toInt()
         button.background = roundedDrawable(
             fillColor = danger,
             strokeColor = ColorUtils.blendARGB(danger, palette.textPrimary, 0.25f)
         )
-        button.setTextColor(0xFFFFFFFF.toInt())
+        button.setTextColor(textColor)
         button.isAllCaps = false
         button.minHeight = 0
         button.minimumHeight = 0
         button.setPadding(28, 16, 28, 16)
+    }
+
+    fun styleInput(input: android.widget.EditText, palette: ThemePalette) {
+        input.background = roundedDrawable(
+            fillColor = palette.panelBackground,
+            strokeColor = ColorUtils.blendARGB(palette.panelBackground, palette.iconTint, 0.30f)
+        )
+        input.setTextColor(palette.textPrimary)
+        input.setHintTextColor(palette.textSecondary)
     }
 
     fun styleDialogSurface(dialog: AlertDialog, palette: ThemePalette) {

@@ -1,18 +1,20 @@
 package cn.jlu.schedule.ui.tools
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.LinearLayout
+import android.widget.ImageView
 import androidx.core.graphics.ColorUtils
 import androidx.fragment.app.Fragment
 import cn.jlu.schedule.R
+import cn.jlu.schedule.auth.TpassConfig
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 
-/** 工具页：汇聚绩点计算器等教务小工具（底部导航「工具」Tab） */
+/** 工具页：汇聚成绩查询、绩点计算、考试安排与学业完成等教务工具（底部导航「工具」Tab） */
 class ToolsFragment : Fragment() {
 
     override fun onCreateView(
@@ -25,17 +27,51 @@ class ToolsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val palette = ThemePaletteProvider.fromContext(requireContext())
-        view.findViewById<View>(R.id.toolsCardStudy).background = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = 18f
-            setColor(palette.panelAltBackground)
-            setStroke(1, ColorUtils.blendARGB(palette.panelAltBackground, palette.iconTint, 0.16f))
+        val ctx = requireContext()
+        val palette = ThemePaletteProvider.fromContext(ctx)
+
+        fun styleCard(cardId: Int, iconId: Int) {
+            view.findViewById<View>(cardId)?.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 18f
+                setColor(palette.panelAltBackground)
+                setStroke(1, ColorUtils.blendARGB(palette.panelAltBackground, palette.iconTint, 0.16f))
+            }
+            view.findViewById<ImageView>(iconId)?.imageTintList = ColorStateList.valueOf(palette.iconTint)
         }
-        view.findViewById<View>(R.id.iconToolStudy).backgroundTintList =
-            android.content.res.ColorStateList.valueOf(palette.iconTint)
-        view.findViewById<View>(R.id.rowGpaCalculator).setOnClickListener {
-            startActivity(Intent(requireContext(), GpaCalculatorActivity::class.java))
+
+        styleCard(R.id.toolsCardAcademics, R.id.iconToolAcademics)
+        styleCard(R.id.toolsCardExams, R.id.iconToolExams)
+        styleCard(R.id.toolsCardWeb, R.id.iconToolWeb)
+
+        // 学业与成绩卡片
+        view.findViewById<View>(R.id.rowGradeInquiry)?.setOnClickListener {
+            startActivity(Intent(ctx, GradeInquiryActivity::class.java))
+        }
+        view.findViewById<View>(R.id.rowGpaCalculator)?.setOnClickListener {
+            startActivity(Intent(ctx, GpaCalculatorActivity::class.java))
+        }
+        view.findViewById<View>(R.id.rowAcademicProgress)?.setOnClickListener {
+            startActivity(Intent(ctx, AcademicProgressActivity::class.java))
+        }
+
+        // 考务与日程卡片
+        view.findViewById<View>(R.id.rowExamSchedule)?.setOnClickListener {
+            startActivity(Intent(ctx, ExamScheduleActivity::class.java))
+        }
+
+        // 智慧教育平台直达卡片
+        view.findViewById<View>(R.id.rowWebPortal)?.setOnClickListener {
+            CampusWebActivity.start(ctx, TpassConfig.IEDU_PORTAL_URL, getString(R.string.tools_web_portal))
+        }
+        view.findViewById<View>(R.id.rowWebGrade)?.setOnClickListener {
+            CampusWebActivity.start(ctx, "https://iedu.jlu.edu.cn/jwapp/sys/cjcx/*default/index.do", getString(R.string.tools_web_grade))
+        }
+        view.findViewById<View>(R.id.rowWebExam)?.setOnClickListener {
+            CampusWebActivity.start(ctx, "https://iedu.jlu.edu.cn/jwapp/sys/kscx/*default/index.do", getString(R.string.tools_web_exam))
+        }
+        view.findViewById<View>(R.id.rowWebAcademic)?.setOnClickListener {
+            CampusWebActivity.start(ctx, "https://iedu.jlu.edu.cn/jwapp/sys/pyfa/*default/index.do", getString(R.string.tools_web_academic))
         }
     }
 }

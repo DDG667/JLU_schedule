@@ -274,38 +274,44 @@ object ImportedScheduleStorage {
     fun importBackup(filesDir: File, content: String): Int = synchronized(lock) {
         val backupProfiles = ScheduleBackupCodec.decode(content)
             ?: throw IllegalArgumentException("备份文件格式不正确")
+        require(backupProfiles.isNotEmpty()) { "备份文件不包含课表" }
         val storageDir = storageDir(filesDir)
-        if (!storageDir.exists()) {
-            storageDir.mkdirs()
+        if (!storageDir.exists() && !storageDir.mkdirs()) {
+            throw IOException("无法创建课表目录")
         }
-        storageDir.listFiles { file ->
+        val oldCourseFiles = storageDir.listFiles { file ->
             file.isFile && file.name.startsWith(COURSES_FILE_PREFIX) && file.name.endsWith(COURSES_FILE_SUFFIX)
-        }?.forEach { it.delete() }
+        }.orEmpty().toList()
 
         val now = System.currentTimeMillis()
-        val newProfiles = backupProfiles.map { backup ->
-            val id = UUID.randomUUID().toString()
-            val fileName = coursesFileName(id)
-            writeCoursesFile(
-                filesDir,
-                fileName,
-                with(ScheduleBackupCodec) { backup.courses.map { it.toCourseSchedule() } }
-            )
-            StoredProfileMeta(
-                id = id,
-                name = backup.name.ifBlank { "课表${timestampLabel()}" },
-                coursesFile = fileName,
-                createdAt = now,
-                updatedAt = now,
-                semesterStartDate = backup.semesterStartDate
-            )
+        val stagedFiles = mutableListOf<File>()
+        val newProfiles = try {
+            backupProfiles.map { backup ->
+                val id = UUID.randomUUID().toString()
+                val fileName = coursesFileName(id)
+                stagedFiles += coursesFile(filesDir, fileName)
+                writeCoursesFile(
+                    filesDir,
+                    fileName,
+                    with(ScheduleBackupCodec) { backup.courses.map { it.toCourseSchedule() } }
+                )
+                StoredProfileMeta(
+                    id = id,
+                    name = backup.name.ifBlank { "课表${timestampLabel()}" },
+                    coursesFile = fileName,
+                    createdAt = now,
+                    updatedAt = now,
+                    semesterStartDate = backup.semesterStartDate
+                )
+            }.also { profiles ->
+                // 所有新课程文件写完后才切换元数据；失败时旧课表仍可读取。
+                saveMeta(filesDir, StoredMeta(activeId = profiles.first().id, profiles = profiles))
+            }
+        } catch (error: Throwable) {
+            stagedFiles.forEach { it.delete() }
+            throw error
         }
-        val restoredMeta = if (newProfiles.isEmpty()) {
-            initializeDefaultProfile(filesDir)
-        } else {
-            StoredMeta(activeId = newProfiles.first().id, profiles = newProfiles)
-        }
-        saveMeta(filesDir, restoredMeta)
+        oldCourseFiles.filterNot { it in stagedFiles }.forEach { it.delete() }
         newProfiles.size
     }
 
@@ -502,7 +508,12 @@ object ImportedScheduleStorage {
         }.onFailure {
             Log.w(TAG, "Failed to read courses file $fileName", it)
         }.getOrDefault(emptyList())
-        return persisted.map { it.toCourseSchedule() }
+        val loaded = persisted.map { it.toCourseSchedule() }
+        val merged = mergeDuplicateCourses(loaded)
+        if (merged.size != loaded.size) {
+            runCatching { writeCoursesFile(filesDir, fileName, merged) }
+        }
+        return merged
     }
 
     private fun writeCoursesFile(filesDir: File, fileName: String, courses: List<CourseSchedule>) {
@@ -562,34 +573,26 @@ object ImportedScheduleStorage {
     }
 
     private fun mergeDuplicateCourses(courses: List<CourseSchedule>): List<CourseSchedule> {
-        return courses.distinctBy { course ->
-            buildString {
-                append(course.courseName)
-                append("|")
-                append(course.teacher)
-                append("|")
-                append(course.semester)
-                append("|")
-                append(course.credit ?: -1)
-                append("|")
-                append(course.rawWeekText)
-                append("|")
-                course.meetings.sortedBy { it.weekday.ordinal * 100 + it.startSection }.forEach { meeting ->
-                    append(meeting.weekday.name)
-                    append(":")
-                    append(meeting.startSection)
-                    append("-")
-                    append(meeting.endSection)
-                    append("@")
-                    append(meeting.location)
-                    append("#")
-                    append(
-                        meeting.weekRules.joinToString(",") { rule ->
-                            "${rule.startWeek}-${rule.endWeek}(${rule.parity.name})"
-                        }
-                    )
-                    append(";")
+        return courses.groupBy { course ->
+            val semKey = SemesterStartDatePolicy.normalizedSemesterKey(course.semester) ?: course.semester.trim()
+            "${course.courseName.trim()}|${course.teacher.trim()}|$semKey"
+        }.values.map { group ->
+            val first = group.first()
+            if (group.size == 1) {
+                first
+            } else {
+                val allMeetings = group.flatMap { it.meetings }.distinctBy { m ->
+                    "${m.weekday}|${m.startSection}|${m.endSection}|${m.location.trim()}|" +
+                        m.weekRules.sortedBy { "${it.startWeek}-${it.endWeek}-${it.parity}" }
+                            .joinToString(",") { "${it.startWeek}-${it.endWeek}-${it.parity}" }
                 }
+                val credit = group.firstNotNullOfOrNull { it.credit }
+                val weekText = group.map { it.rawWeekText.trim() }.filter { it.isNotBlank() }.distinct().joinToString(",")
+                first.copy(
+                    credit = credit,
+                    rawWeekText = weekText.ifBlank { first.rawWeekText },
+                    meetings = allMeetings
+                )
             }
         }
     }

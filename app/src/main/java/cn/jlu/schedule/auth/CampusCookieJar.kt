@@ -37,12 +37,25 @@ class CampusCookieJar(private val storeFile: File) : CookieJar {
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
         synchronized(lock) {
             ensureLoaded()
+            val now = System.currentTimeMillis()
             cookies.forEach { cookie ->
                 if (!isAllowed(cookie)) return@forEach
                 val key = cookieKey(cookie)
-                if (cookie.expiresAt <= System.currentTimeMillis()) {
+                if (cookie.expiresAt <= now) {
                     this.cookies.remove(key)
                 } else {
+                    // 如果是 iedu.jlu.edu.cn 下的核心会话 Cookie，清理同名旧 Cookie，防止不同 path 导致旧 Cookie 遮蔽新 Cookie
+                    if (cookie.domain.contains("iedu.jlu.edu.cn") &&
+                        (cookie.name.equals("JSESSIONID", true) ||
+                         cookie.name.equals("GS_SESSIONID", true) ||
+                         cookie.name.equals("_WEU", true) ||
+                         cookie.name.equals("route", true))
+                    ) {
+                        val staleKeys = this.cookies.keys.filter {
+                            it.startsWith(cookie.domain) && it.endsWith("|${cookie.name}")
+                        }
+                        staleKeys.forEach { this.cookies.remove(it) }
+                    }
                     this.cookies[key] = cookie
                 }
             }
@@ -68,7 +81,16 @@ class CampusCookieJar(private val storeFile: File) : CookieJar {
                 expired.forEach { cookies.remove(it) }
                 persist()
             }
-            return matched
+            // 按照路径深度降序排列（越具体的路径排在越前面），优先保留匹配度最高的 Cookie
+            // 例如 /jwapp/sys/cjcx 的 JSESSIONID 优先于根路径 / 的 JSESSIONID
+            val sortedMatched = matched.sortedByDescending { it.path.length }
+            val deduplicated = LinkedHashMap<String, Cookie>()
+            for (cookie in sortedMatched) {
+                if (!deduplicated.containsKey(cookie.name)) {
+                    deduplicated[cookie.name] = cookie
+                }
+            }
+            return deduplicated.values.toList()
         }
     }
 
@@ -78,10 +100,28 @@ class CampusCookieJar(private val storeFile: File) : CookieJar {
         var imported = 0
         synchronized(lock) {
             ensureLoaded()
+            val now = System.currentTimeMillis()
             header.split(";").forEach { part ->
                 val cookie = Cookie.parse(url, part.trim()) ?: return@forEach
-                if (isAllowed(cookie) && cookie.expiresAt > System.currentTimeMillis()) {
-                    cookies[cookieKey(cookie)] = cookie
+                if (isAllowed(cookie) && cookie.expiresAt > now) {
+                    val isIeduSession = cookie.domain.contains("iedu.jlu.edu.cn") &&
+                        (cookie.name.equals("JSESSIONID", true) ||
+                         cookie.name.equals("GS_SESSIONID", true) ||
+                         cookie.name.equals("_WEU", true) ||
+                         cookie.name.equals("route", true))
+
+                    if (isIeduSession) {
+                        val staleKeys = this.cookies.keys.filter {
+                            it.startsWith(cookie.domain) && it.endsWith("|${cookie.name}")
+                        }
+                        staleKeys.forEach { this.cookies.remove(it) }
+
+                        val normalizedPath = if (cookie.name.equals("route", true)) "/" else "/jwapp"
+                        val normalizedCookie = cloneWithNewPath(cookie, normalizedPath)
+                        cookies[cookieKey(normalizedCookie)] = normalizedCookie
+                    } else {
+                        cookies[cookieKey(cookie)] = cookie
+                    }
                     imported++
                 }
             }
@@ -91,6 +131,35 @@ class CampusCookieJar(private val storeFile: File) : CookieJar {
             }
         }
         return imported
+    }
+
+    fun getCastgc(): String? {
+        synchronized(lock) {
+            ensureLoaded()
+            val now = System.currentTimeMillis()
+            return cookies.values.firstOrNull {
+                it.name == "CASTGC" && it.value.isNotBlank() && it.expiresAt > now
+            }?.value
+        }
+    }
+
+    fun clearIeduSession() {
+        synchronized(lock) {
+            ensureLoaded()
+            val toRemove = cookies.keys.filter { key ->
+                val lower = key.lowercase()
+                lower.contains("iedu.jlu.edu.cn")
+            }
+            toRemove.forEach { cookies.remove(it) }
+            persist()
+        }
+    }
+
+    fun getAllCookies(): List<Cookie> {
+        synchronized(lock) {
+            ensureLoaded()
+            return cookies.values.toList()
+        }
     }
 
     fun clear() {
@@ -105,6 +174,18 @@ class CampusCookieJar(private val storeFile: File) : CookieJar {
 
     private fun cookieKey(cookie: Cookie): String =
         "${cookie.domain}|${cookie.path}|${cookie.name}"
+
+    private fun cloneWithNewPath(cookie: Cookie, newPath: String): Cookie {
+        val builder = Cookie.Builder()
+            .name(cookie.name)
+            .value(cookie.value)
+            .path(newPath)
+            .expiresAt(cookie.expiresAt)
+        if (cookie.hostOnly) builder.hostOnlyDomain(cookie.domain) else builder.domain(cookie.domain)
+        if (cookie.secure) builder.secure()
+        if (cookie.httpOnly) builder.httpOnly()
+        return builder.build()
+    }
 
     private fun trimToLimit() {
         while (cookies.size > MAX_COOKIES) {

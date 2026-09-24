@@ -138,10 +138,13 @@ class TimetableFragment : Fragment() {
         }
     }
 
+    private var currentUiData: ScheduleRepository.TimetableUiData? = null
+
     private fun renderTimetable(data: ScheduleRepository.TimetableUiData) {
         if (!isAdded || view == null) {
             return
         }
+        currentUiData = data
         val ctx = requireContext()
         pageChangeCallback?.let { callback ->
             if (pageChangeRegistered) {
@@ -171,10 +174,18 @@ class TimetableFragment : Fragment() {
             fontScale = fontScale,
             palette = palette,
             hasCustomBackground = hasCustomBackground,
-            onCourseClick = { item ->
+            onCourseClick = { primary, allItems ->
                 if (isAdded && !parentFragmentManager.isStateSaved) {
                     runCatching {
-                        CourseDetailBottomSheet.show(requireContext(), item, SectionTimes.DEFAULT_RANGES)
+                        CourseDetailBottomSheet.show(
+                            context = requireContext(),
+                            primary = primary,
+                            allCourses = allItems,
+                            periodRanges = SectionTimes.DEFAULT_RANGES,
+                            onCoverPinned = {
+                                currentUiData?.let { renderTimetable(it) }
+                            }
+                        )
                     }
                 }
             }
@@ -182,12 +193,13 @@ class TimetableFragment : Fragment() {
         // 保留用户当前浏览的周，避免数据刷新时被强制跳回本周
         val previousPosition = weekPager.adapter?.let { weekPager.currentItem } ?: -1
         weekPager.adapter = adapter
-        if (previousPosition >= 0) {
-            weekPager.setCurrentItem(previousPosition.coerceAtMost(data.totalWeeks - 1), false)
+        val targetPosition = if (previousPosition >= 0) {
+            previousPosition.coerceAtMost(data.totalWeeks - 1)
         } else {
-            weekPager.setCurrentItem(currentWeekIndex - 1, false)
+            currentWeekIndex - 1
         }
-        updateHeader(currentWeekIndex)
+        weekPager.setCurrentItem(targetPosition, false)
+        updateHeader(targetPosition + 1)
 
         val callback = object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {

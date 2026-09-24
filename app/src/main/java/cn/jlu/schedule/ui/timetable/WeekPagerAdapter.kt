@@ -26,7 +26,7 @@ class WeekPagerAdapter(
     private val fontScale: Float,
     private val palette: ThemePalette,
     private val hasCustomBackground: Boolean,
-    private val onCourseClick: (CourseMeetingRef) -> Unit
+    private val onCourseClick: (primary: CourseMeetingRef, allItems: List<CourseMeetingRef>) -> Unit
 ) : RecyclerView.Adapter<WeekPagerAdapter.WeekViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): WeekViewHolder {

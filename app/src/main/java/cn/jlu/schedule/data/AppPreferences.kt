@@ -1,9 +1,11 @@
 package cn.jlu.schedule.data
 
 import android.content.Context
+import cn.jlu.schedule.model.Weekday
 
 object AppPreferences {
     private const val PREFS_NAME = "app_settings"
+    private const val KEY_PINNED_COURSES = "pinned_course"
     private const val KEY_DEFAULT_OPEN_PAGE = "default_open_page"
     private const val KEY_CUSTOM_BACKGROUND_URI = "custom_background_uri"
     private const val KEY_SEMESTER_START_DATE = "semester_start_date"
@@ -95,7 +97,7 @@ object AppPreferences {
 
     fun getTimetableFontScale(context: Context): Float {
         val saved = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getFloat(KEY_TIMETABLE_FONT_SCALE, 1.0f)
+            .getFloat(KEY_TIMETABLE_FONT_SCALE, 0.95f)
         return when {
             saved < 0.98f -> 0.95f
             saved > 1.08f -> 1.15f
@@ -177,6 +179,31 @@ object AppPreferences {
             .edit()
             .putString(KEY_LEARNED_SCHEDULE_ENDPOINT, url)
             .apply()
+    }
+
+    /**
+     * 获取指定星期和节次的置顶封面课程名称
+     */
+    fun getPinnedCourse(context: Context, weekday: Weekday, section: Int): String? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString("${KEY_PINNED_COURSES}_${weekday.name}_$section", null)
+    }
+
+    /**
+     * 将某门课程设为指定时段的课表封面（或传入 null 清除置顶）
+     */
+    fun setPinnedCourseForSlot(context: Context, weekday: Weekday, sections: IntRange, courseName: String?) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+        for (sec in sections) {
+            val key = "${KEY_PINNED_COURSES}_${weekday.name}_$sec"
+            if (courseName == null) {
+                editor.remove(key)
+            } else {
+                editor.putString(key, courseName)
+            }
+        }
+        editor.apply()
     }
 
     const val DEFAULT_REMINDER_MINUTE = 7 * 60 + 30

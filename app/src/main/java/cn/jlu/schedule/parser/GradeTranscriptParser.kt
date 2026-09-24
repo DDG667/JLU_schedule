@@ -29,8 +29,10 @@ object GradeTranscriptParser {
                 val row = element as? JsonObject ?: return@mapNotNull null
                 val credit = row.primitive("XF")?.toDoubleOrNull() ?: return@mapNotNull null
                 if (credit <= 0.0) return@mapNotNull null
-                val score = row.primitive("ZCJ")?.trim() ?: return@mapNotNull null
-                if (score.isEmpty()) return@mapNotNull null
+                val score = row.primitive("ZCJ")?.trim()?.ifEmpty { null }
+                    ?: row.primitive("XSZCJMC")?.trim()?.ifEmpty { null }
+                    ?: row.primitive("DJCJMC")?.trim()?.ifEmpty { null }
+                    ?: return@mapNotNull null
                 ImportedGrade(
                     courseCode = row.primitive("KCH").orEmpty().trim(),
                     name = row.primitive("KCM").orEmpty().trim(),

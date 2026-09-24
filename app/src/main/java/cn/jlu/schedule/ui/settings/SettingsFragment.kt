@@ -182,10 +182,13 @@ class SettingsFragment : Fragment() {
             accountLoginLauncher.launch(Intent(requireContext(), cn.jlu.schedule.ui.auth.LoginActivity::class.java))
         }
         view.findViewById<View>(R.id.rowAccountLogout).setOnClickListener {
-            cn.jlu.schedule.remote.JwApiClient.clearSession(requireContext())
             cn.jlu.schedule.auth.JluCredentialStore.clear(requireContext())
-            refreshAccountCard(view)
-            UiFeedback.showMessage(view, "已退出登录", paletteForFeedback())
+            cn.jlu.schedule.remote.JwApiClient.clearSession(requireContext()) {
+                if (isAdded && this.view === view) {
+                    refreshAccountCard(view)
+                    UiFeedback.showMessage(view, "已退出登录", paletteForFeedback())
+                }
+            }
         }
         refreshAccountCard(view)
         view.findViewById<View>(R.id.rowSemesterStart).setOnClickListener {

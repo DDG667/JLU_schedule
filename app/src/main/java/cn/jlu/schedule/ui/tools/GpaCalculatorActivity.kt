@@ -35,6 +35,7 @@ import cn.jlu.schedule.data.GpaCourseStore
 import cn.jlu.schedule.domain.GpaCalculator
 import cn.jlu.schedule.domain.GpaCourse
 import cn.jlu.schedule.domain.GpaGradeType
+import cn.jlu.schedule.domain.ImportedGrade
 import cn.jlu.schedule.parser.GradeTranscriptParser
 import cn.jlu.schedule.remote.JwApiClient
 import cn.jlu.schedule.ui.auth.LoginActivity
@@ -189,7 +190,23 @@ class GpaCalculatorActivity : AppCompatActivity() {
         importing = true
         importButton.isEnabled = false
         resultMeta.text = getString(R.string.gpa_import_progress)
-        startWebViewGradeFetch()
+
+        lifecycleScope.launch {
+            // 通道一：原生 OkHttp 极速直连（无需等待 WebView 下载渲染数兆脚本，直接拉取历年全量）
+            val nativeGrades = runCatching { JwApiClient.fetchAllGrades(this@GpaCalculatorActivity) }.getOrDefault(emptyList())
+            if (nativeGrades.isNotEmpty()) {
+                val semesterCount = nativeGrades.map { it.semesterCode }.filter { it.isNotBlank() }.distinct().size
+                if (nativeGrades.size >= 25 || semesterCount > 2) {
+                    importing = false
+                    importButton.isEnabled = true
+                    applyImported(GpaCalculator.mergeImported(nativeGrades))
+                    return@launch
+                }
+            }
+
+            // 通道二：若原生直连未拉到多学期，启动 WebView 自动化多学期协同抓取
+            startWebViewGradeFetch()
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
@@ -261,13 +278,7 @@ class GpaCalculatorActivity : AppCompatActivity() {
             handler: android.webkit.SslErrorHandler,
             error: android.net.http.SslError
         ) {
-            // 校园私有 CA：与网页导入/一键导入一致的信任决策（仅限校园域）
-            val host = runCatching { android.net.Uri.parse(error.url ?: "").host ?: "" }.getOrDefault("")
-            if (host.endsWith(CampusCookieJar.ALLOWED_DOMAIN_SUFFIX, ignoreCase = true)) {
-                handler.proceed()
-            } else {
-                handler.cancel()
-            }
+            handler.cancel()
         }
 
         override fun onPageFinished(view: WebView, url: String) {
@@ -289,10 +300,6 @@ class GpaCalculatorActivity : AppCompatActivity() {
         connection.connectTimeout = 15000
         connection.readTimeout = 20000
         connection.instanceFollowRedirects = true
-        if (target.host?.endsWith(CampusCookieJar.ALLOWED_DOMAIN_SUFFIX, ignoreCase = true) == true) {
-            connection.sslSocketFactory = trustingSslContext().socketFactory
-            connection.setHostnameVerifier(javax.net.ssl.HostnameVerifier { _, _ -> true })
-        }
         CookieManager.getInstance().getCookie(target.toString())?.let {
             connection.setRequestProperty("Cookie", it)
         }
@@ -302,6 +309,23 @@ class GpaCalculatorActivity : AppCompatActivity() {
         val mimeType = connection.contentType?.substringBefore(';')?.trim() ?: "text/html"
         val body = connection.inputStream.use { it.readBytes() }
         Log.i(TAG, "grade page doc $target -> ${connection.responseCode} $mimeType len=${body.size}")
+
+        val setCookies = connection.headerFields["Set-Cookie"] ?: emptyList()
+        if (setCookies.isNotEmpty()) {
+            val cookieManager = CookieManager.getInstance()
+            val host = target.host.orEmpty()
+            for (cookieHeader in setCookies) {
+                cookieManager.setCookie(target.toString(), cookieHeader)
+                if (host.isNotBlank()) {
+                    cookieManager.setCookie("https://$host/", cookieHeader)
+                    cookieManager.setCookie("https://$host/jwapp/", cookieHeader)
+                    cookieManager.setCookie("https://$host/jwapp/sys/cjcx/", cookieHeader)
+                }
+            }
+            cookieManager.flush()
+            JwApiClient.importAllWebViewCookies(this@GpaCalculatorActivity)
+        }
+
         if (!mimeType.contains("html", ignoreCase = true)) {
             return WebResourceResponse(mimeType, "UTF-8", body.inputStream())
         }
@@ -348,10 +372,17 @@ class GpaCalculatorActivity : AppCompatActivity() {
             capturedPayloads.add(url to text)
             Log.i(TAG, "captured grade-ish payload #${capturedPayloads.size} ($url, ${text.length} bytes)")
         }
-        // 滚动静默期：每次新捕获重置，收齐页面全部查询后再解析
+
+        val totalCourses = synchronized(capturedPayloads) {
+            capturedPayloads.flatMap { GradeTranscriptParser.parse(it.second) }
+                .distinctBy { "${it.semesterCode}_${it.courseCode}_${it.name}" }
+        }
+        val isFullTranscript = totalCourses.size >= 25 || totalCourses.map { it.semesterCode }.distinct().size > 2
+
+        val quietTime = if (isFullTranscript) 1500L else 7000L
         fetchQuietJob?.cancel()
         fetchQuietJob = lifecycleScope.launch {
-            delay(CAPTURE_QUIET_MS)
+            delay(quietTime)
             finishFetch(reason = "quiet")
         }
     }
@@ -364,6 +395,8 @@ class GpaCalculatorActivity : AppCompatActivity() {
             capturedPayloads.asSequence()
                 .filter { GradeTranscriptParser.isLikelyGradePayload(it.second) }
                 .flatMap { GradeTranscriptParser.parse(it.second).asSequence() }
+                .distinctBy { "${it.semesterCode}_${it.courseCode}_${it.name}" }
+                .sortedWith(compareByDescending<ImportedGrade> { it.semesterCode }.thenBy { it.courseCode })
                 .toList()
         }
         Log.i(TAG, "grade fetch finish ($reason): ${grades.size} grades from ${capturedPayloads.size} payloads")
@@ -391,60 +424,75 @@ class GpaCalculatorActivity : AppCompatActivity() {
             runOnUiThread { onGradePayloadCaptured(safeUrl, body) }
         }
 
-        /** 页面上下文内的自动查询：round 1 回报可点元素，round≥2 按文本点页签与查询按钮 */
+        /** 页面上下文内的自动查询：round 1 回报可点元素，切换【全部】并触发全量 AJAX 查询 */
         @JavascriptInterface
         fun autoQuery(round: Int) {
             if (fetchFinished.get()) return
-            val js = if (round <= 1) {
-                """
-                (function(){
-                  var out = [];
-                  document.querySelectorAll('button, a, input, .btn, [role=button], span[class], div[class], i[class], li').forEach(function(el){
-                    var t = ((el.innerText || el.value || '') + '').trim().split('\n')[0];
-                    if (!t || t.length > 10) return;
-                    var c = ((el.className && el.className.toString()) || '').slice(0, 40);
-                    out.push(el.tagName + '|' + c + '|' + t);
+            val js = """
+            (function(){
+              // 1. 精准模拟原生鼠标事件点击【全部】tab（触发 jqxTabs 切换与 qb.js 模块初始化）
+              try {
+                var tabs = document.querySelectorAll('#tab li, .cjcx-tab li, ul[role="tablist"] li');
+                if (tabs && tabs.length > 1) {
+                  tabs[1].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+                  tabs[1].dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+                  tabs[1].click();
+                }
+              } catch(e) {}
+
+              // 2. 若 #qb-index-table 已存在，重载全量数据
+              try {
+                if (window.jQuery && jQuery('#qb-index-table').length && jQuery('#qb-index-table').data('emapdatatable')) {
+                  jQuery('#qb-index-table').emapdatatable('reload', { pageSize: 1000, pageNumber: 1 });
+                }
+              } catch(e) {}
+
+              // 3. 在页面已授权会话上下文中，直接通过 jQuery 发送全量学期查询（pageSize=1000，消除分页截断）
+              try {
+                if (window.jQuery && window.WIS_EMAP_SERV) {
+                  var url = WIS_EMAP_SERV.getAbsPath('modules/cjcx/xscjcx.do');
+                  var defaultQuery = [
+                    {"name": "SFYX", "caption": "是否有效", "linkOpt": "AND", "builderList": "cbl_m_List", "builder": "m_value_equal", "value": "1", "value_display": "是"},
+                    {"name": "SHOWMAXCJ", "caption": "显示最高成绩", "linkOpt": "AND", "builderList": "cbl_m_List", "builder": "m_value_equal", "value": "0", "value_display": "否"}
+                  ];
+                  jQuery.ajax({
+                    url: url,
+                    type: 'POST',
+                    data: {
+                      querySetting: JSON.stringify(defaultQuery),
+                      '*order': '-XNXQDM,-KCH,-KXH',
+                      pageSize: 1000,
+                      pageNumber: 1
+                    },
+                    dataType: 'text',
+                    success: function(resp) {
+                      try { GpaGradeBridge.onCaptured(url, resp); } catch(err) {}
+                    }
                   });
-                  try { GpaGradeBridge.onCaptured('dom-report', 'round=$round count=' + out.length + ' :: ' + out.join(';;').slice(0, 1600)); } catch(e) {}
-                })()
-                """.trimIndent()
-            } else {
-                """
-                (function(){
-                  var tabs = ['历年成绩','全部成绩','入学以来','全部','历年'];
-                  var buttons = ['查询','搜索','确定'];
-                  function textOf(el){ return ((el.innerText || el.value || '') + '').trim().split('\n')[0]; }
-                  function clickIf(el, words){
-                    var t = textOf(el);
-                    if (!t || t.length > 6) return false;
-                    for (var i = 0; i < words.length; i++) { if (t.indexOf(words[i]) >= 0) { try { el.click(); return true; } catch(e) {} } }
-                    return false;
-                  }
-                  var clicked = [];
-                  document.querySelectorAll('button, a, input[type=button], input[type=submit], .btn, .bh-btn, [role=button], span, div, i, li').forEach(function(el){
-                    if (clicked.length > 6) return;
-                    if (clickIf(el, tabs)) clicked.push(textOf(el) + ':tab');
-                    else if (clickIf(el, buttons)) clicked.push(textOf(el) + ':btn');
+                  jQuery.ajax({
+                    url: url,
+                    type: 'POST',
+                    data: {
+                      querySetting: '[]',
+                      '*order': '-XNXQDM,-KCH,-KXH',
+                      pageSize: 1000,
+                      pageNumber: 1
+                    },
+                    dataType: 'text',
+                    success: function(resp) {
+                      try { GpaGradeBridge.onCaptured(url, resp); } catch(err) {}
+                    }
                   });
-                  try { GpaGradeBridge.onCaptured('autoclick', 'round=$round clicked=' + clicked.join(',') + ' total=' + document.querySelectorAll('*').length); } catch(e) {}
-                })()
-                """.trimIndent()
-            }
+                }
+              } catch(e) {}
+              try { GpaGradeBridge.onCaptured('autoclick', 'round=$round triggered'); } catch(e) {}
+            })()
+            """.trimIndent()
             runOnUiThread {
                 if (!fetchFinished.get() && !isDestroyed) {
                     runCatching { fetchWebView.evaluateJavascript(js, null) }
                 }
             }
-        }
-    }
-
-    private fun trustingSslContext(): javax.net.ssl.SSLContext {
-        return javax.net.ssl.SSLContext.getInstance("TLS").apply {
-            init(null, arrayOf<javax.net.ssl.TrustManager>(object : javax.net.ssl.X509TrustManager {
-                override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) = Unit
-                override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) = Unit
-                override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
-            }), java.security.SecureRandom())
         }
     }
 
@@ -493,7 +541,7 @@ class GpaCalculatorActivity : AppCompatActivity() {
 
     private fun addCourse() {
         val credit = creditInput.text.toString().trim().toDoubleOrNull()
-        if (credit == null || credit <= 0.0) {
+        if (credit == null || !credit.isFinite() || credit <= 0.0) {
             UiFeedback.showMessage(courseList, getString(R.string.gpa_invalid_credit), palette)
             return
         }
@@ -501,7 +549,7 @@ class GpaCalculatorActivity : AppCompatActivity() {
         val course = when (gradeType) {
             GpaGradeType.PERCENT -> {
                 val score = scoreInput.text.toString().trim().toDoubleOrNull()
-                if (score == null || score < GpaCalculator.MIN_SCORE || score > GpaCalculator.MAX_SCORE) {
+                if (score == null || !score.isFinite() || score < GpaCalculator.MIN_SCORE || score > GpaCalculator.MAX_SCORE) {
                     UiFeedback.showMessage(courseList, getString(R.string.gpa_invalid_score), palette)
                     return
                 }

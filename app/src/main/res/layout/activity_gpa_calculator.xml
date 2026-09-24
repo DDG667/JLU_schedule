@@ -294,6 +294,7 @@
             android:id="@+id/gpaFetchWebView"
             android:layout_width="1dp"
             android:layout_height="1dp"
-            android:visibility="invisible" />
+            android:visibility="invisible"
+            tools:ignore="WebViewLayout" />
     </LinearLayout>
 </ScrollView>

@@ -251,6 +251,17 @@ class ImportedScheduleStorageTest {
     }
 
     @Test
+    fun importBackup_rejectsEmptyProfilesWithoutRemovingExistingCourses() {
+        ImportedScheduleStorage.addManualCourseToActive(filesDir, manualCourse("保留课程"))
+
+        assertThrows(IllegalArgumentException::class.java) {
+            ImportedScheduleStorage.importBackup(filesDir, """{"version":1,"profiles":[]}""")
+        }
+
+        assertEquals("保留课程", ImportedScheduleStorage.loadActiveCourses(filesDir).single().courseName)
+    }
+
+    @Test
     fun exportActiveTimetableText_containsCourseInfo() {
         ImportedScheduleStorage.listProfiles(filesDir)
         ImportedScheduleStorage.addManualCourseToActive(filesDir, manualCourse("大学物理"))
