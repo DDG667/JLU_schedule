@@ -315,6 +315,46 @@ class WeekTimetableRenderer(
                 })
             }
             dayColumn.addView(card)
+
+            // 封面课程比同组其他课程短时，仍要显示剩余节次的实际课程。
+            slot.uncoveredSegments().forEach { segment ->
+                val segmentTop = (segment.startSection - 1) * m.sectionHeight + 2
+                val segmentHeight = (segment.endSection - segment.startSection + 1) * m.sectionHeight - 4
+                val continuation = LinearLayout(context).apply {
+                    layoutParams = FrameLayout.LayoutParams(cardWidth, segmentHeight.coerceAtLeast(36)).apply {
+                        topMargin = segmentTop
+                        leftMargin = m.cellGap / 2
+                    }
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(m.cardPadding, m.cardPadding, m.cardPadding, m.cardPadding)
+                    background = roundedBackground(CourseCardColors.forCourse(segment.course.courseIndex, palette.isDark))
+                    elevation = 6f
+                    setOnClickListener {
+                        onCourseClick(
+                            segment.course.toCourseMeetingRef(),
+                            slot.allCourses.map { it.toCourseMeetingRef() }
+                        )
+                    }
+                    addView(TextView(context).apply {
+                        text = segment.course.course.courseName
+                        textSize = fittedSize(segment.course.course.courseName, 12f, 9.8f) * fontScale
+                        setTextColor(CourseCardColors.textColorFor(segment.course.courseIndex, palette.isDark))
+                        setTypeface(typeface, Typeface.BOLD)
+                        maxLines = 2
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                        includeFontPadding = false
+                    })
+                    addView(TextView(context).apply {
+                        text = segment.course.meeting.location.ifBlank { "教室待定" }
+                        textSize = 9f * fontScale
+                        setTextColor(CourseCardColors.textColorFor(segment.course.courseIndex, palette.isDark))
+                        maxLines = 2
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                        includeFontPadding = false
+                    })
+                }
+                dayColumn.addView(continuation)
+            }
         }
 
         return dayColumn
@@ -324,7 +364,41 @@ class WeekTimetableRenderer(
         val primary: CourseMeetingDisplayRef,
         val allCourses: List<CourseMeetingDisplayRef>,
         val hasConflict: Boolean = allCourses.map { it.course.courseName }.distinct().size > 1 && allCourses.all { it.isCurrentWeek }
-    )
+    ) {
+        data class Segment(val course: CourseMeetingDisplayRef, val startSection: Int, val endSection: Int)
+
+        fun uncoveredSegments(): List<Segment> {
+            if (!hasConflict) return emptyList()
+            val primaryStart = primary.meeting.startSection.coerceIn(1, 12)
+            val primaryEnd = primary.meeting.endSection.coerceIn(primaryStart, 12)
+            val first = allCourses.minOf { it.meeting.startSection }.coerceIn(1, 12)
+            val last = allCourses.maxOf { it.meeting.endSection }.coerceIn(first, 12)
+            val segments = mutableListOf<Segment>()
+            var section = first
+            while (section <= last) {
+                if (section in primaryStart..primaryEnd) {
+                    section++
+                    continue
+                }
+                val course = allCourses.asSequence()
+                    .filter { section in it.meeting.startSection..it.meeting.endSection }
+                    .maxWithOrNull(compareBy<CourseMeetingDisplayRef> { it.meeting.endSection - it.meeting.startSection }
+                        .thenByDescending { it.courseIndex })
+                if (course == null) {
+                    section++
+                    continue
+                }
+                val start = section
+                while (section <= last && section !in primaryStart..primaryEnd &&
+                    section in course.meeting.startSection..course.meeting.endSection
+                ) {
+                    section++
+                }
+                segments += Segment(course, start, section - 1)
+            }
+            return segments
+        }
+    }
 
     internal fun resolveSlotsForDay(
         context: Context?,

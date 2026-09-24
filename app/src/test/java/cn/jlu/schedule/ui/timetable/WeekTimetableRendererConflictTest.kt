@@ -120,6 +120,32 @@ class WeekTimetableRendererConflictTest {
     }
 
     @Test
+    fun testShortPinnedCoverKeepsLongCourseVisibleInRemainingSections() {
+        val longCourse = createItem(0, "单片机控制与应用实验", Weekday.THURSDAY, 1, 4)
+        val shortCourse = createItem(1, "离散数学Ⅱ", Weekday.THURSDAY, 1, 2)
+
+        val slot = renderer.resolveSlotsForDay(null, Weekday.THURSDAY, listOf(longCourse, shortCourse)) { _, _ ->
+            "离散数学Ⅱ"
+        }.single()
+
+        assertEquals("离散数学Ⅱ", slot.primary.course.courseName)
+        assertEquals(1, slot.uncoveredSegments().size)
+        assertEquals("单片机控制与应用实验", slot.uncoveredSegments().single().course.course.courseName)
+        assertEquals(3, slot.uncoveredSegments().single().startSection)
+        assertEquals(4, slot.uncoveredSegments().single().endSection)
+    }
+
+    @Test
+    fun testLongCoverNeedsNoContinuation() {
+        val longCourse = createItem(0, "单片机控制与应用实验", Weekday.THURSDAY, 1, 4)
+        val shortCourse = createItem(1, "离散数学Ⅱ", Weekday.THURSDAY, 1, 2)
+
+        val slot = renderer.resolveSlotsForDay(null, Weekday.THURSDAY, listOf(longCourse, shortCourse)).single()
+
+        assertTrue(slot.uncoveredSegments().isEmpty())
+    }
+
+    @Test
     fun testSameCourseDifferentWeeksDoesNotFormConflict() {
         // 同一门课跨周次的不同 meeting（例如马克思主义基本原理第1-9周线下，第10周线上）
         val meetingCurrent = createItem(0, "马克思主义基本原理", Weekday.THURSDAY, 7, 8, isCurrentWeek = true, nextActiveWeek = 4)
@@ -172,4 +198,3 @@ class WeekTimetableRendererConflictTest {
         assertEquals(1, slots[0].allCourses.size)
     }
 }
-
