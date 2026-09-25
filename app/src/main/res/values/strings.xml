@@ -29,6 +29,7 @@
     <string name="nav_timetable">课表</string>
     <string name="nav_settings">设置</string>
     <string name="settings_title">设置</string>
+    <string name="settings_intro">管理课表、校园账号与应用偏好</string>
     <string name="settings_timetable_manage">课表管理</string>
     <string name="settings_open_timetable_manage">打开课表管理页</string>
     <string name="settings_default_page">启动默认页面</string>
@@ -105,15 +106,22 @@
     <string name="notification_reminder_empty">今天没有课程安排</string>
     <string name="account_login_title">吉林大学统一身份认证</string>
     <string name="account_login_close">关闭</string>
-    <string name="account_login_hint">登录成功后会话将自动保存，供一键导入与自动续登使用</string>
+    <string name="account_login_hint">已打开吉大官方登录页。你可以手动输入或扫码完成登录</string>
+    <string name="account_web_auto_hint">正在使用本机保存的账号密码登录；如出现验证码，请在此页面手动完成</string>
+    <string name="account_student_id">校园账号 / 学号</string>
+    <string name="account_password">统一认证密码</string>
+    <string name="account_save_and_login">保存并自动提交登录</string>
+    <string name="account_web_login">手动 / 扫码网页登录</string>
+    <string name="account_native_hint">账号密码保存在本机加密存储中；登录时自动填入吉大官方网页，验证码由你完成</string>
     <string name="settings_account_title">校园账号</string>
     <string name="settings_account_status_label">登录状态</string>
+    <string name="settings_account_not_saved">本机尚未保存账号</string>
+    <string name="settings_account_saved">本机已保存账号：%1$s</string>
     <string name="settings_account_status_out">未登录</string>
     <string name="settings_account_login">登录校园账号</string>
     <string name="settings_account_relogin">重新登录</string>
-    <string name="settings_account_logout">退出登录</string>
-    <string name="settings_account_remember">记住密码（会话失效时自动重登）</string>
-    <string name="settings_account_hint">登录后可在课表页一键导入课表；密码经系统级加密存储，不参与云备份</string>
+    <string name="settings_account_logout">退出登录并删除本地账号</string>
+    <string name="settings_account_hint">凭据仅在本机加密保存。会话过期时会尝试恢复；需要验证码时请手动完成。</string>
     <string name="import_quick">一键导入课表</string>
     <string name="import_quick_progress_fetch">正在通过校园会话自动获取课表…</string>
     <string name="import_quick_progress_relogin">登录已过期，正在自动重登…</string>
@@ -243,5 +251,21 @@
     <!-- 通用操作 -->
     <string name="action_close">关闭</string>
     <string name="close">关闭</string>
-</resources>
 
+    <!-- 应用内更新 -->
+    <string name="update_check_title">检查新版本</string>
+    <string name="update_checking">正在检查更新…</string>
+    <string name="update_dialog_title">发现新版本</string>
+    <string name="update_action_download_and_install">立即更新</string>
+    <string name="update_action_later">稍后提醒</string>
+    <string name="update_action_ignore">忽略此版本</string>
+    <string name="update_action_install_now">立即安装</string>
+    <string name="update_action_cancel">取消下载</string>
+    <string name="update_action_retry">重试</string>
+    <string name="update_cellular_warning">⚠️ 当前处于移动网络，预计消耗流量约 %1$s</string>
+    <string name="update_is_latest">当前已是最新版本</string>
+    <string name="update_downloading">正在下载更新包…</string>
+    <string name="update_download_success">下载完成，正在准备安装</string>
+    <string name="update_permission_required">安装更新需要开启“允许安装未知应用”权限，请在设置中开启后重试</string>
+    <string name="update_permission_go_settings">去设置</string>
+</resources>

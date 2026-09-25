@@ -49,5 +49,8 @@ replay_pid*
 **/captures/
 **/outputs/
 app/release
+scripts/keys/
+*.pem
+release_keys/
 
 

@@ -16,6 +16,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,6 +39,7 @@ import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 import cn.jlu.schedule.ui.theme.UiFeedback
 import com.yalantis.ucrop.UCrop
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -48,6 +50,7 @@ import java.util.Locale
 
 class SettingsFragment : Fragment() {
     private var pendingSourceUri: Uri? = null
+    private var accountCheckJob: Job? = null
 
     private val manageProfilesLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
@@ -119,6 +122,7 @@ class SettingsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val palette = ThemePaletteProvider.fromContext(requireContext())
+        val density = resources.displayMetrics.density
 
         // 卡片与分隔线按主题色板着色
         listOf(
@@ -128,34 +132,36 @@ class SettingsFragment : Fragment() {
             view.findViewById<LinearLayout>(R.id.settingsCardReminder),
             view.findViewById<LinearLayout>(R.id.settingsCardBackground),
             view.findViewById<LinearLayout>(R.id.settingsCardData),
+            view.findViewById<LinearLayout>(R.id.settingsCardAbout),
         ).forEach { card ->
             card.background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = 18f
-                setColor(palette.panelAltBackground)
+                cornerRadius = 18f * density
+                setColor(palette.detailCard)
                 setStroke(
-                    1,
-                    ColorUtils.blendARGB(palette.panelAltBackground, palette.iconTint, 0.16f)
+                    maxOf(1, density.toInt()),
+                    ColorUtils.blendARGB(palette.detailCard, palette.textSecondary, 0.13f)
                 )
             }
         }
         listOf(
-            view.findViewById<View>(R.id.iconTimetable),
-            view.findViewById<View>(R.id.iconAccount),
-            view.findViewById<View>(R.id.iconAppearance),
-            view.findViewById<View>(R.id.iconReminder),
-            view.findViewById<View>(R.id.iconBackground),
-            view.findViewById<View>(R.id.iconData),
+            view.findViewById<ImageView>(R.id.iconTimetable),
+            view.findViewById<ImageView>(R.id.iconAccount),
+            view.findViewById<ImageView>(R.id.iconAppearance),
+            view.findViewById<ImageView>(R.id.iconReminder),
+            view.findViewById<ImageView>(R.id.iconBackground),
+            view.findViewById<ImageView>(R.id.iconData),
+            view.findViewById<ImageView>(R.id.iconAbout),
         ).forEach { icon ->
-            icon.backgroundTintList = ColorStateList.valueOf(palette.iconTint)
+            icon.imageTintList = ColorStateList.valueOf(palette.iconTint)
+            icon.background = GradientDrawable().apply {
+                cornerRadius = 11f * density
+                setColor(ColorUtils.blendARGB(palette.detailCard, palette.buttonBackground, 0.65f))
+            }
         }
-        listOf(
-            view.findViewById<View>(R.id.dividerTimetable),
-            view.findViewById<View>(R.id.dividerAppearance),
-        ).forEach { divider ->
-            divider.backgroundTintList = ColorStateList.valueOf(
-                ColorUtils.blendARGB(palette.panelAltBackground, palette.textSecondary, 0.18f)
-            )
+        view.findViewById<View>(R.id.accountStatusPanel).background = GradientDrawable().apply {
+            cornerRadius = 12f * density
+            setColor(ColorUtils.blendARGB(palette.detailCard, palette.buttonBackground, 0.46f))
         }
 
         // 可点击行
@@ -169,19 +175,17 @@ class SettingsFragment : Fragment() {
         }
 
         // 校园账号卡片
-        val accountRememberSwitch = view.findViewById<SwitchCompat>(R.id.accountRememberSwitch)
-        accountRememberSwitch.isChecked = AppPreferences.isRememberPassword(requireContext())
-        accountRememberSwitch.setOnCheckedChangeListener { _, checked ->
-            AppPreferences.setRememberPassword(requireContext(), checked)
-            if (!checked) {
-                cn.jlu.schedule.auth.JluCredentialStore.clear(requireContext())
-            }
-            refreshAccountCard(view)
-        }
         view.findViewById<View>(R.id.rowAccountLogin).setOnClickListener {
-            accountLoginLauncher.launch(Intent(requireContext(), cn.jlu.schedule.ui.auth.LoginActivity::class.java))
+            accountLoginLauncher.launch(
+                Intent(requireContext(), cn.jlu.schedule.ui.auth.LoginActivity::class.java)
+                    .putExtra(cn.jlu.schedule.ui.auth.LoginActivity.EXTRA_EDIT_CREDENTIALS, true)
+            )
         }
         view.findViewById<View>(R.id.rowAccountLogout).setOnClickListener {
+            accountCheckJob?.cancel()
+            view.findViewById<TextView>(R.id.accountStatusText).text = "正在退出…"
+            view.findViewById<TextView>(R.id.accountIdentityText)
+                .setText(R.string.settings_account_not_saved)
             cn.jlu.schedule.auth.JluCredentialStore.clear(requireContext())
             cn.jlu.schedule.remote.JwApiClient.clearSession(requireContext()) {
                 if (isAdded && this.view === view) {
@@ -190,7 +194,6 @@ class SettingsFragment : Fragment() {
                 }
             }
         }
-        refreshAccountCard(view)
         view.findViewById<View>(R.id.rowSemesterStart).setOnClickListener {
             showSemesterDatePicker(semesterStartDateText)
         }
@@ -213,6 +216,52 @@ class SettingsFragment : Fragment() {
         }
         view.findViewById<View>(R.id.rowRestore).setOnClickListener {
             restoreLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+        }
+
+        // 检查新版本
+        val checkUpdateRow = view.findViewById<View>(R.id.rowCheckUpdate)
+        val versionText = view.findViewById<TextView>(R.id.updateVersionText)
+        val currentVersionName = runCatching {
+            requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName
+        }.getOrNull() ?: "2.1.0"
+        versionText.text = "v$currentVersionName"
+
+        checkUpdateRow.setOnClickListener {
+            versionText.text = getString(R.string.update_checking)
+            checkUpdateRow.isEnabled = false
+            viewLifecycleOwner.lifecycleScope.launch {
+                val repo = cn.jlu.schedule.update.repository.UpdateRepository()
+                val result = repo.checkUpdate(requireContext(), force = true, allowInDebug = true)
+                if (!isAdded) return@launch
+                versionText.text = "v$currentVersionName"
+                checkUpdateRow.isEnabled = true
+                when (result) {
+                    is cn.jlu.schedule.update.model.UpdateCheckResult.UpdateAvailable -> {
+                        cn.jlu.schedule.update.ui.UpdateDialogHelper.showUpdateDialog(
+                            activity = requireActivity(),
+                            payload = result.payload,
+                            preferredMirror = result.preferredMirror
+                        )
+                    }
+                    is cn.jlu.schedule.update.model.UpdateCheckResult.NoUpdate -> {
+                        UiFeedback.showMessage(view, getString(R.string.update_is_latest), palette)
+                    }
+                    is cn.jlu.schedule.update.model.UpdateCheckResult.MirrorMismatch -> {
+                        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                            .setTitle("更新警告")
+                            .setMessage(result.message)
+                            .setPositiveButton(R.string.close, null)
+                            .show()
+                    }
+                    is cn.jlu.schedule.update.model.UpdateCheckResult.Error -> {
+                        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                            .setTitle("检查更新失败")
+                            .setMessage(result.message)
+                            .setPositiveButton(R.string.close, null)
+                            .show()
+                    }
+                }
+            }
         }
 
         // 分段选择器
@@ -340,17 +389,41 @@ class SettingsFragment : Fragment() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        view?.let { refreshAccountCard(it) }
+    }
+
+    override fun onDestroyView() {
+        accountCheckJob?.cancel()
+        accountCheckJob = null
+        super.onDestroyView()
+    }
+
     private fun refreshAccountCard(view: View) {
+        accountCheckJob?.cancel()
         val context = view.context
         val studentId = cn.jlu.schedule.auth.JluCredentialStore.studentId(context)
-        val hasSession = cn.jlu.schedule.remote.JwApiClient.hasSession(context)
-        view.findViewById<TextView>(R.id.accountStatusText).text = when {
-            hasSession -> if (studentId != null) "已登录 · $studentId" else "已登录"
-            studentId != null -> "已记住账号 · 待登录"
-            else -> getString(R.string.settings_account_status_out)
+        view.findViewById<TextView>(R.id.accountStatusText).text = "正在验证…"
+        view.findViewById<TextView>(R.id.accountIdentityText).text = if (studentId == null) {
+            getString(R.string.settings_account_not_saved)
+        } else {
+            getString(R.string.settings_account_saved, studentId)
         }
         view.findViewById<TextView>(R.id.accountLoginLabel).text =
-            getString(if (studentId == null && !hasSession) R.string.settings_account_login else R.string.settings_account_relogin)
+            getString(if (studentId == null) R.string.settings_account_login else R.string.settings_account_relogin)
+        accountCheckJob = viewLifecycleOwner.lifecycleScope.launch {
+            val status = withContext(Dispatchers.IO) {
+                cn.jlu.schedule.remote.JwApiClient.checkIeduSession(context)
+            }
+            if (this@SettingsFragment.view !== view) return@launch
+            view.findViewById<TextView>(R.id.accountStatusText).text = when (status) {
+                cn.jlu.schedule.remote.JwApiClient.SessionStatus.VALID -> "已登录"
+                cn.jlu.schedule.remote.JwApiClient.SessionStatus.EXPIRED -> "登录已过期"
+                cn.jlu.schedule.remote.JwApiClient.SessionStatus.UNAVAILABLE -> "暂时无法连接服务器"
+                cn.jlu.schedule.remote.JwApiClient.SessionStatus.CERTIFICATE_ERROR -> "证书校验失败"
+            }
+        }
     }
 
     private fun paletteForFeedback(): ThemePalette = ThemePaletteProvider.fromContext(requireContext())
@@ -364,6 +437,11 @@ class SettingsFragment : Fragment() {
         // 选中状态保存在闭包内并即时重绘：不依赖页面重建（"启动默认打开"等
         // 不触发 recreate 的选项，以及 NightMode 视觉不变时的模式切换）
         var currentSelection = selectedId
+        val density = resources.displayMetrics.density
+        container.background = GradientDrawable().apply {
+            cornerRadius = 12f * density
+            setColor(if (palette.isDark) palette.panelAltBackground else palette.panelBackground)
+        }
 
         fun restyle() {
             val count = container.childCount
@@ -372,10 +450,11 @@ class SettingsFragment : Fragment() {
                 val checked = child.id == currentSelection
                 child.background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
-                    cornerRadius = 9f
-                    setColor(if (checked) palette.buttonBackground else palette.panelBackground)
+                    cornerRadius = 9f * density
+                    setColor(if (checked) palette.buttonBackground else Color.TRANSPARENT)
                 }
-                child.setTextColor(if (checked) palette.buttonText else palette.textSecondary)
+                child.setTextColor(if (checked) palette.buttonText else palette.textPrimary)
+                child.isSelected = checked
             }
         }
 

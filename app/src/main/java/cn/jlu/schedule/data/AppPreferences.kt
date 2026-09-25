@@ -15,7 +15,6 @@ object AppPreferences {
     private const val KEY_DARK_MODE = "dark_mode"
     private const val KEY_REMINDER_ENABLED = "daily_reminder_enabled"
     private const val KEY_REMINDER_MINUTE = "daily_reminder_minute"
-    private const val KEY_REMEMBER_PASSWORD = "remember_password"
     private const val KEY_LEARNED_SCHEDULE_ENDPOINT = "learned_schedule_endpoint"
 
     const val PAGE_TIMETABLE = "timetable"
@@ -155,19 +154,6 @@ object AppPreferences {
             .apply()
     }
 
-    /** 是否保存校园账号密码用于会话失效后静默重登，默认开启 */
-    fun isRememberPassword(context: Context): Boolean {
-        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getBoolean(KEY_REMEMBER_PASSWORD, true)
-    }
-
-    fun setRememberPassword(context: Context, remember: Boolean) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_REMEMBER_PASSWORD, remember)
-            .apply()
-    }
-
     /** 网页导入时自学习到的课表接口完整 URL（适配校内直连 / WebVPN 两种入口） */
     fun getLearnedScheduleEndpoint(context: Context): String? {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -204,6 +190,33 @@ object AppPreferences {
             }
         }
         editor.apply()
+    }
+
+    private const val KEY_LAST_UPDATE_CHECK_TIME = "last_update_check_time"
+    private const val KEY_IGNORED_UPDATE_VERSION = "ignored_update_version"
+
+    fun getLastUpdateCheckTime(context: Context): Long {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getLong(KEY_LAST_UPDATE_CHECK_TIME, 0L)
+    }
+
+    fun setLastUpdateCheckTime(context: Context, timestamp: Long) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putLong(KEY_LAST_UPDATE_CHECK_TIME, timestamp)
+            .apply()
+    }
+
+    fun getIgnoredUpdateVersion(context: Context): Int {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getInt(KEY_IGNORED_UPDATE_VERSION, -1)
+    }
+
+    fun setIgnoredUpdateVersion(context: Context, versionCode: Int) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_IGNORED_UPDATE_VERSION, versionCode)
+            .apply()
     }
 
     const val DEFAULT_REMINDER_MINUTE = 7 * 60 + 30

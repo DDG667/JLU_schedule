@@ -9,6 +9,13 @@ import android.provider.MediaStore
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import cn.jlu.schedule.update.model.UpdateCheckResult
+import cn.jlu.schedule.update.repository.UpdateRepository
+import cn.jlu.schedule.update.ui.UpdateDialogHelper
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.data.ScheduleRepository
@@ -35,6 +42,21 @@ class MainActivity : AppCompatActivity() {
         applyUserAppearance()
         refreshCustomBackground()
         ScheduleRepository.refresh(this)
+
+        lifecycleScope.launch {
+            delay(1500)
+            if (isFinishing || isDestroyed) return@launch
+            val updateRepo = UpdateRepository()
+            val result = updateRepo.checkAutoUpdate(this@MainActivity)
+            if (isFinishing || isDestroyed) return@launch
+            if (result is UpdateCheckResult.UpdateAvailable) {
+                UpdateDialogHelper.showUpdateDialog(
+                    activity = this@MainActivity,
+                    payload = result.payload,
+                    preferredMirror = result.preferredMirror
+                )
+            }
+        }
 
         if (savedInstanceState == null) {
             val defaultPage = AppPreferences.getDefaultOpenPage(this)
@@ -128,6 +150,10 @@ class MainActivity : AppCompatActivity() {
 
     fun applyUserAppearance() {
         val palette = ThemePaletteProvider.fromContext(this)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = !palette.isDark
+            isAppearanceLightNavigationBars = !palette.isDark
+        }
         rootContainer.setBackgroundColor(palette.pageBackground)
         bottomNav.setBackgroundColor(palette.navBackground)
         val itemColors = ColorStateList(
