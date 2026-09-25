@@ -336,7 +336,7 @@ class QuickImportActivity : AppCompatActivity() {
 
     /** 抓到课表 JSON：落盘去重，滚动静默期后统一解析入库 */
     private fun onPayloadCaptured(url: String, text: String) {
-        val key = sha1("$url|${text.take(256)}")
+        val key = captureKey(url, text)
         synchronized(capturedKeys) {
             if (!capturedKeys.add(key)) return
         }
@@ -502,6 +502,9 @@ class QuickImportActivity : AppCompatActivity() {
         fun sha1(value: String): String =
             MessageDigest.getInstance("SHA-1").digest(value.toByteArray(Charsets.UTF_8))
                 .joinToString("") { "%02x".format(it) }
+
+        /** 同一接口可能连续返回不同周/学期数据，必须比较完整响应。 */
+        fun captureKey(url: String, content: String): String = sha1("$url|$content")
 
         fun start(activity: android.app.Activity, createNew: Boolean, newName: String?, requestCode: Int) {
             activity.startActivityForResult(

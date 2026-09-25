@@ -21,6 +21,13 @@ object WeekScheduleCalculator {
         return week.coerceIn(1, totalWeeks.coerceAtLeast(1))
     }
 
+    /** 今天处于学期范围内时返回实际周数；学期前后不应展示旧课程。 */
+    fun activeWeekOrNull(semesterStart: LocalDate, today: LocalDate, totalWeeks: Int): Int? {
+        val days = ChronoUnit.DAYS.between(semesterStart, today)
+        val week = Math.floorDiv(days, 7L) + 1L
+        return week.takeIf { it in 1L..totalWeeks.toLong() }?.toInt()
+    }
+
     fun meetingsForWeek(courses: List<CourseSchedule>, week: Int): List<CourseMeetingRef> {
         return courses.flatMapIndexed { index, course ->
             course.meetings

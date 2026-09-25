@@ -26,22 +26,24 @@ object JluCredentialStore {
     private const val KEY_STUDENT_ID = "student_id"
     private const val KEY_PASSWORD = "password"
 
-    fun save(context: Context, credentials: JluCredentials) {
-        runCatching { prefs(context) }
-            .onFailure { return }
-            .getOrNull()
-            ?.edit()
-            ?.putString(KEY_STUDENT_ID, credentials.studentId.trim())
-            ?.putString(KEY_PASSWORD, credentials.password)
-            ?.apply()
+    /** 只有加密存储确实写入成功，才向界面报告已保存。 */
+    fun save(context: Context, credentials: JluCredentials): Boolean {
+        if (credentials.studentId.isBlank() || credentials.password.isEmpty()) return false
+        return runCatching {
+            prefs(context).edit()
+                .putString(KEY_STUDENT_ID, credentials.studentId.trim())
+                .putString(KEY_PASSWORD, credentials.password)
+                .commit()
+        }.onFailure { Log.w(TAG, "保存加密凭据失败", it) }.getOrDefault(false)
     }
 
     fun load(context: Context): JluCredentials? {
-        val prefs = runCatching { prefs(context) }.getOrNull() ?: return null
-        val id = prefs.getString(KEY_STUDENT_ID, null)?.trim().orEmpty()
-        val password = prefs.getString(KEY_PASSWORD, null) ?: return null
-        if (id.isEmpty() || password.isEmpty()) return null
-        return JluCredentials(id, password)
+        return runCatching {
+            val prefs = prefs(context)
+            val id = prefs.getString(KEY_STUDENT_ID, null)?.trim().orEmpty()
+            val password = prefs.getString(KEY_PASSWORD, null).orEmpty()
+            if (id.isEmpty() || password.isEmpty()) null else JluCredentials(id, password)
+        }.onFailure { Log.w(TAG, "读取加密凭据失败", it) }.getOrNull()
     }
 
     fun studentId(context: Context): String? {

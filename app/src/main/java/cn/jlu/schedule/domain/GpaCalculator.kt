@@ -47,7 +47,9 @@ data class ImportedGrade(
     val credit: Double,
     /** 原始成绩文本：百分制数字或五级制等级（优秀/良好/中等/及格/不及格） */
     val scoreText: String = "",
-    val semesterCode: String = ""
+    val semesterCode: String = "",
+    /** 用户手动录入或修改的记录，同步时保留。 */
+    val isCustom: Boolean = false
 )
 
 object GpaCalculator {

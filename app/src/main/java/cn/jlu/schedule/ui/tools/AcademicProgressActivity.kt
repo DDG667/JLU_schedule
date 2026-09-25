@@ -289,7 +289,7 @@ class AcademicProgressActivity : AppCompatActivity() {
     }
 
     private fun startSyncFromWeb() {
-        if (!JwApiClient.hasSession(this)) {
+        if (!JwApiClient.canRestoreSession(this)) {
             startActivityForResult(Intent(this, LoginActivity::class.java), REQ_LOGIN)
             return
         }

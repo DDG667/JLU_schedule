@@ -26,13 +26,12 @@ object GradeStore {
     fun load(filesDir: File): List<ImportedGrade> = synchronized(lock) {
         val file = gradesFile(filesDir)
         if (file.exists()) {
-            val list = runCatching {
+            return runCatching {
                 json.decodeFromString(ListSerializer(ImportedGrade.serializer()), file.readText(Charsets.UTF_8))
             }.getOrElse { emptyList() }
-            if (list.isNotEmpty()) return list
         }
 
-        // 智能回退：若 grades.json 暂无数据，自动从 GpaCourseStore 读取已保存的课程并转换
+        // 仅首次没有 grades.json 时从绩点数据迁移；已保存的 [] 表示用户明确清空。
         val gpaCourses = runCatching { GpaCourseStore.load(filesDir) }.getOrDefault(emptyList())
         if (gpaCourses.isNotEmpty()) {
             val converted = convertFromGpaCourses(gpaCourses)
@@ -62,10 +61,7 @@ object GradeStore {
     }
 
     fun clear(filesDir: File): Unit = synchronized(lock) {
-        val file = gradesFile(filesDir)
-        if (file.exists() && !file.delete()) {
-            throw java.io.IOException("无法删除成绩数据文件")
-        }
+        save(filesDir, emptyList())
     }
 
     /** 将 GpaCourse 转换为 ImportedGrade，提取嵌入在 id 中的课程代码与学期 */
@@ -95,9 +91,29 @@ object GradeStore {
                 name = c.name,
                 credit = c.credit,
                 scoreText = scoreText,
-                semesterCode = sem
+                semesterCode = sem,
+                isCustom = !c.id.startsWith("jw-")
             )
         }
+    }
+
+    /** 教务结果可能只覆盖部分学期；保留未匹配旧记录，并优先保留用户修改。 */
+    fun mergeSyncedGrades(existing: List<ImportedGrade>, fetched: List<ImportedGrade>): List<ImportedGrade> {
+        val kept = existing.filter { old ->
+            old.isCustom || fetched.none { remote -> sameCourse(old, remote) }
+        }
+        val remote = fetched.filterNot { grade ->
+            kept.any { it.isCustom && sameCourse(it, grade) }
+        }
+        return kept + remote
+    }
+
+    private fun sameCourse(a: ImportedGrade, b: ImportedGrade): Boolean {
+        if (!a.semesterCode.trim().equals(b.semesterCode.trim(), ignoreCase = true)) return false
+        if (a.courseCode.isNotBlank() && b.courseCode.isNotBlank()) {
+            return a.courseCode.trim().equals(b.courseCode.trim(), ignoreCase = true)
+        }
+        return a.name.isNotBlank() && a.name.trim().equals(b.name.trim(), ignoreCase = true)
     }
 
     /** 将 ImportedGrade 同步推入 GpaCourseStore，供绩点计算器共享使用 */

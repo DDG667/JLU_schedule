@@ -7,6 +7,7 @@ import cn.jlu.schedule.model.WeekRule
 import cn.jlu.schedule.model.Weekday
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -67,6 +68,15 @@ class WeekScheduleCalculatorTest {
     fun guessCurrentWeek_clampsToTotalWeeks() {
         val start = LocalDate.of(2026, 8, 31)
         assertEquals(20, WeekScheduleCalculator.guessCurrentWeek(start, start.plusDays(365), 20))
+    }
+
+    @Test
+    fun activeWeekOrNull_excludesDatesOutsideSemester() {
+        val start = LocalDate.of(2026, 8, 31)
+        assertNull(WeekScheduleCalculator.activeWeekOrNull(start, start.minusDays(1), 20))
+        assertEquals(1, WeekScheduleCalculator.activeWeekOrNull(start, start, 20))
+        assertEquals(20, WeekScheduleCalculator.activeWeekOrNull(start, start.plusDays(139), 20))
+        assertNull(WeekScheduleCalculator.activeWeekOrNull(start, start.plusDays(140), 20))
     }
 
     @Test

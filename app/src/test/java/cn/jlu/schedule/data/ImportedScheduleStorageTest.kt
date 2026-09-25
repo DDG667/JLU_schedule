@@ -62,6 +62,28 @@ class ImportedScheduleStorageTest {
     }
 
     @Test
+    fun legacyMigrationDeletesSourceOnlyAfterCoursesArePersisted() {
+        val legacy = File(filesDir, "imported_schedule.do")
+        legacy.writeText("""{"datas":{"course":{"rows":[{"KCM":"高等数学","SKJS":"张三","XNXQDM":"2026-2027-1","SKXQ":1,"KSJC":1,"JSJC":2}]}}}""")
+
+        val courses = ImportedScheduleStorage.loadActiveCourses(filesDir)
+
+        assertEquals("高等数学", courses.single().courseName)
+        assertFalse(legacy.exists())
+        assertTrue(File(storageDir(), "meta.json").exists())
+    }
+
+    @Test
+    fun invalidLegacyScheduleRemainsAvailableForRecovery() {
+        val legacy = File(filesDir, "imported_schedule.do")
+        legacy.writeText("{invalid json")
+
+        assertTrue(ImportedScheduleStorage.loadActiveCourses(filesDir).isEmpty())
+        assertTrue(legacy.exists())
+        assertEquals("{invalid json", legacy.readText())
+    }
+
+    @Test
     fun addManualCourse_persistsAndReloads() {
         ImportedScheduleStorage.listProfiles(filesDir)
         ImportedScheduleStorage.addManualCourseToActive(filesDir, manualCourse("大学物理"))

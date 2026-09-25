@@ -28,6 +28,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.ColorUtils
+import androidx.lifecycle.lifecycleScope
 import cn.jlu.schedule.R
 import cn.jlu.schedule.auth.CampusCookieJar
 import cn.jlu.schedule.auth.TpassConfig
@@ -46,6 +47,7 @@ import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.HttpsURLConnection
+import kotlinx.coroutines.launch
 
 /**
  * 考试查询界面：期末/期中考试日程、地点、座位号及倒计时，支持从教务同步与手动自定义添加。
@@ -325,14 +327,31 @@ class ExamScheduleActivity : AppCompatActivity() {
     }
 
     private fun startSyncExams() {
-        if (!JwApiClient.hasSession(this)) {
+        if (!JwApiClient.canRestoreSession(this)) {
             promptNeedLogin()
             return
         }
-        fetchFinished.set(false)
-        capturedBuffer.clear()
+        if (!syncBtn.isEnabled) return
         progressBar.visibility = View.VISIBLE
         syncBtn.isEnabled = false
+        syncBtn.text = "正在验证校园会话…"
+        lifecycleScope.launch {
+            val valid = JwApiClient.ensureSession(this@ExamScheduleActivity)
+            if (!valid) {
+                progressBar.visibility = View.GONE
+                syncBtn.isEnabled = true
+                syncBtn.text = getString(R.string.exam_sync_button)
+                promptNeedLogin()
+                return@launch
+            }
+            JwApiClient.syncJarToWebView(this@ExamScheduleActivity)
+            beginExamFetch()
+        }
+    }
+
+    private fun beginExamFetch() {
+        fetchFinished.set(false)
+        capturedBuffer.clear()
         syncBtn.text = "正在同步考程…"
 
         mainHandler.postDelayed({

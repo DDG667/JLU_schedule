@@ -431,6 +431,12 @@ object ImportedScheduleStorage {
             )
         )
         saveMeta(filesDir, initialized)
+        if (initialCourses.isNotEmpty()) {
+            val legacy = File(filesDir, LEGACY_FILE_NAME)
+            if (legacy.exists() && !legacy.delete()) {
+                Log.w(TAG, "Failed to remove migrated legacy schedule")
+            }
+        }
         return initialized
     }
 
@@ -472,7 +478,6 @@ object ImportedScheduleStorage {
             val parsed = runCatching { DoScheduleParser.parse(legacy.readText(Charsets.UTF_8)) }
                 .onFailure { Log.w(TAG, "Failed to parse legacy imported schedule", it) }
                 .getOrNull()
-            legacy.delete()
             return parsed.orEmpty()
         }
         return emptyList()

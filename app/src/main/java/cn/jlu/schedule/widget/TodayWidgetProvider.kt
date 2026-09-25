@@ -81,12 +81,13 @@ class TodayWidgetProvider : AppWidgetProvider() {
                 val semesterStart = ImportedScheduleStorage.getActiveSemesterStartDate(files)
                 val today = LocalDate.now()
                 val totalWeeks = WeekScheduleCalculator.totalWeeks(courses)
-                val week = WeekScheduleCalculator.guessCurrentWeek(semesterStart, today, totalWeeks)
+                val week = WeekScheduleCalculator.activeWeekOrNull(semesterStart, today, totalWeeks)
                 val weekdayLabel = when (today.dayOfWeek.value) {
                     1 -> "一"; 2 -> "二"; 3 -> "三"; 4 -> "四"; 5 -> "五"; 6 -> "六"; else -> "日"
                 }
-                val subtitle = "${today.format(DateTimeFormatter.ofPattern("M月d日"))} 周$weekdayLabel · 第${week}周"
-                val items = WeekScheduleCalculator.meetingsForWeek(courses, week)
+                val subtitle = "${today.format(DateTimeFormatter.ofPattern("M月d日"))} 周$weekdayLabel · " +
+                    (week?.let { "第${it}周" } ?: "学期外")
+                val items = week?.let { WeekScheduleCalculator.meetingsForWeek(courses, it) }.orEmpty()
                     .filter { it.meeting.weekday == weekdayFrom(today) }
                     .distinctBy {
                         listOf(

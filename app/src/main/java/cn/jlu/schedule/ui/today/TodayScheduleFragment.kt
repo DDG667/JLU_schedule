@@ -103,8 +103,8 @@ class TodayScheduleFragment : Fragment() {
 
         val ctx = requireContext()
         val courses = data.courses
-        val week = data.currentWeek
-        val todayMeetings = WeekScheduleCalculator.meetingsForWeek(courses, week)
+        val week = WeekScheduleCalculator.activeWeekOrNull(data.semesterStart, today, data.totalWeeks)
+        val todayMeetings = week?.let { WeekScheduleCalculator.meetingsForWeek(courses, it) }.orEmpty()
             .filter { it.meeting.weekday == todayWeekday }
             .distinctBy {
                 listOf(

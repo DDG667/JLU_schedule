@@ -16,9 +16,11 @@ import java.util.concurrent.TimeUnit
 
 /**
  * 教务平台原生 HTTP 客户端单例：持久化 CookieJar + 统一 UA。
- * 首次登录由内嵌 WebView 完成，登录成功后把 WebView Cookie 迁移进来。
+ * 支持应用内账号密码登录；验证码等情况可由 WebView 登录后迁移 Cookie。
  */
 object JwApiClient {
+
+    enum class SessionStatus { VALID, EXPIRED, UNAVAILABLE, CERTIFICATE_ERROR }
 
     @Volatile
     private var cached: OkHttpClient? = null
@@ -96,7 +98,11 @@ object JwApiClient {
 
     /** 校验业务会话；失效时只尝试一次已保存凭据的静默登录。 */
     suspend fun ensureSession(context: Context): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        if (probeIeduSession(context)) return@withContext true
+        when (checkIeduSession(context)) {
+            SessionStatus.VALID -> return@withContext true
+            SessionStatus.UNAVAILABLE, SessionStatus.CERTIFICATE_ERROR -> return@withContext false
+            SessionStatus.EXPIRED -> Unit
+        }
         if (silentLogin(context) !is CasLoginResult.Success) return@withContext false
         probeIeduSession(context)
     }
@@ -143,26 +149,52 @@ object JwApiClient {
         }
     }
 
-    /** iedu 域是否还有可用会话 Cookie（用于设置页状态展示） */
+    /** 本地是否还有可能使用的会话 Cookie；不能据此显示“已登录”。 */
     fun hasSession(context: Context): Boolean {
         val url = runCatching { TpassConfig.IEDU_PORTAL_URL.toHttpUrl() }.getOrNull() ?: return false
         return cookieJar(context).loadForRequest(url).isNotEmpty()
     }
+
+    /** 教务操作可尝试已有会话，或用已保存账号在过期后重新登录。 */
+    fun canRestoreSession(context: Context): Boolean = hasSession(context) || JluCredentialStore.hasSaved(context)
 
     /**
      * 原生会话能否真正访问教务应用：访问 wdkb 应用页并跟随重定向，
      * 最终仍落在 iedu 域（而非被踢到 CAS 登录页）才算有效。
      * 若 CAS 侧 TGT 仍有效，这条链会顺带把新业务会话 Cookie 写回 CookieJar。
      */
-    fun probeIeduSession(context: Context): Boolean {
+    fun probeIeduSession(context: Context): Boolean = checkIeduSession(context) == SessionStatus.VALID
+
+    /** 实际请求教务应用。网络故障与认证过期分开呈现，避免误报。 */
+    fun checkIeduSession(context: Context): SessionStatus {
         return runCatching {
             val request = okhttp3.Request.Builder()
                 .url("https://iedu.jlu.edu.cn/jwapp/sys/wdkb/*default/index.do")
                 .build()
             get(context).newCall(request).execute().use { response ->
-                response.request.url.host == TpassConfig.IEDU_HOST && response.isSuccessful
+                val pageStart = if (response.isSuccessful &&
+                    response.request.url.host == TpassConfig.IEDU_HOST
+                ) response.peekBody(8192).string() else ""
+                classifySessionResponse(response.request.url.host, response.code, pageStart)
             }
-        }.getOrDefault(false)
+        }.getOrElse { error ->
+            android.util.Log.w("JwApiClient", "session probe unavailable", error)
+            val certificateRejected = generateSequence(error) { it.cause }.any {
+                it is java.security.cert.CertificateException ||
+                    it is java.security.cert.CertPathValidatorException
+            }
+            if (certificateRejected) SessionStatus.CERTIFICATE_ERROR else SessionStatus.UNAVAILABLE
+        }
+    }
+
+    internal fun classifySessionResponse(host: String, code: Int, pageStart: String): SessionStatus {
+        if (code >= 500) return SessionStatus.UNAVAILABLE
+        if (host != TpassConfig.IEDU_HOST || code !in 200..299) return SessionStatus.EXPIRED
+        val body = pageStart.lowercase()
+        if (body.contains("id=\"loginform\"") || body.contains("id='loginform'") ||
+            (body.contains("/tpass/login") && body.contains("password"))
+        ) return SessionStatus.EXPIRED
+        return SessionStatus.VALID
     }
 
     private fun getCompleteCookieHeader(context: Context): String {

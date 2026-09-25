@@ -83,7 +83,7 @@ class DailyReminderReceiver : BroadcastReceiver() {
             val courses = ImportedScheduleStorage.loadActiveCourses(files)
             val semesterStart = ImportedScheduleStorage.getActiveSemesterStartDate(files)
             val today = LocalDate.now()
-            val week = WeekScheduleCalculator.guessCurrentWeek(
+            val week = WeekScheduleCalculator.activeWeekOrNull(
                 semesterStart,
                 today,
                 WeekScheduleCalculator.totalWeeks(courses)
@@ -97,7 +97,7 @@ class DailyReminderReceiver : BroadcastReceiver() {
                 6 -> java.time.DayOfWeek.SATURDAY
                 else -> java.time.DayOfWeek.SUNDAY
             }
-            val meetings = WeekScheduleCalculator.meetingsForWeek(courses, week)
+            val meetings = week?.let { WeekScheduleCalculator.meetingsForWeek(courses, it) }.orEmpty()
                 .filter { it.meeting.weekday.name == weekday.name }
                 .distinctBy {
                     listOf(

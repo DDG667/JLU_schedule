@@ -40,8 +40,8 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:orientation">vertical</item>
-        <item name="android:padding">16dp</item>
-        <item name="android:layout_marginBottom">14dp</item>
+        <item name="android:padding">14dp</item>
+        <item name="android:layout_marginBottom">12dp</item>
     </style>
 
     <style name="SettingsCardHeader">
@@ -49,23 +49,24 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:orientation">horizontal</item>
         <item name="android:gravity">center_vertical</item>
-        <item name="android:layout_marginBottom">4dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
     </style>
 
     <style name="SettingsCardIcon">
-        <item name="android:layout_width">18dp</item>
-        <item name="android:layout_height">18dp</item>
-        <item name="android:layout_marginEnd">8dp</item>
+        <item name="android:layout_width">34dp</item>
+        <item name="android:layout_height">34dp</item>
+        <item name="android:padding">7dp</item>
+        <item name="android:layout_marginEnd">10dp</item>
         <item name="android:importantForAccessibility">no</item>
     </style>
 
     <style name="SettingsCardTitle">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textSize">13sp</item>
+        <item name="android:textSize">15sp</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:textColor">?android:attr/textColorSecondary</item>
-        <item name="android:letterSpacing">0.08</item>
+        <item name="android:textColor">?android:attr/textColorPrimary</item>
+        <item name="android:letterSpacing">0.02</item>
     </style>
 
     <style name="SettingsRow">
@@ -73,24 +74,33 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:orientation">horizontal</item>
         <item name="android:gravity">center_vertical</item>
-        <item name="android:minHeight">46dp</item>
-        <item name="android:paddingTop">5dp</item>
-        <item name="android:paddingBottom">5dp</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:paddingTop">3dp</item>
+        <item name="android:paddingBottom">3dp</item>
         <item name="android:foreground">?attr/selectableItemBackground</item>
+    </style>
+
+    <style name="SettingsFieldLabel">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:minHeight">32dp</item>
+        <item name="android:paddingTop">4dp</item>
     </style>
 
     <style name="SettingsRowLabel">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_weight">1</item>
-        <item name="android:textSize">15sp</item>
+        <item name="android:textSize">14sp</item>
         <item name="android:textColor">?android:attr/textColorPrimary</item>
     </style>
 
     <style name="SettingsRowValue">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textSize">14sp</item>
+        <item name="android:textSize">13sp</item>
         <item name="android:textColor">?android:attr/textColorSecondary</item>
         <item name="android:layout_marginEnd">4dp</item>
     </style>
@@ -101,6 +111,7 @@
         <item name="android:src">@drawable/ic_settings_chevron</item>
         <item name="android:importantForAccessibility">no</item>
         <item name="android:alpha">0.55</item>
+        <item name="android:tint">?android:attr/textColorSecondary</item>
     </style>
 
     <style name="SettingsRowSwitch">
@@ -113,27 +124,27 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:orientation">horizontal</item>
         <item name="android:padding">3dp</item>
-        <item name="android:layout_marginBottom">4dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
     </style>
 
     <style name="SettingsSegmentButton">
         <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_height">36dp</item>
         <item name="android:layout_weight">1</item>
         <item name="android:gravity">center</item>
-        <item name="android:paddingTop">8dp</item>
-        <item name="android:paddingBottom">8dp</item>
         <item name="android:textSize">13sp</item>
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
+        <item name="android:foreground">?attr/selectableItemBackground</item>
     </style>
 
     <style name="SettingsDivider">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">1dp</item>
-        <item name="android:layout_marginTop">4dp</item>
-        <item name="android:layout_marginBottom">4dp</item>
-        <item name="android:alpha">0.6</item>
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:layout_marginBottom">2dp</item>
+        <item name="android:background">?android:attr/textColorSecondary</item>
+        <item name="android:alpha">0.16</item>
     </style>
 
     <style name="SettingsCardHint">
@@ -141,8 +152,7 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textSize">12sp</item>
         <item name="android:textColor">?android:attr/textColorSecondary</item>
-        <item name="android:alpha">0.8</item>
-        <item name="android:layout_marginTop">6dp</item>
+        <item name="android:layout_marginTop">8dp</item>
     </style>
 <!-- 课程详情底部弹窗样式（颜色在代码中按主题色板动态着色） -->
     <style name="CourseDetailRow">
@@ -203,5 +213,3 @@
         <item name="android:textSize">14sp</item>
     </style>
 </resources>
-
-

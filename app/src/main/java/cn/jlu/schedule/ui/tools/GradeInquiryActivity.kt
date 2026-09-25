@@ -430,7 +430,8 @@ class GradeInquiryActivity : AppCompatActivity() {
                     name = name,
                     credit = credit,
                     scoreText = score,
-                    semesterCode = semester
+                    semesterCode = semester,
+                    isCustom = true
                 )
 
                 if (existing != null) {
@@ -486,7 +487,7 @@ class GradeInquiryActivity : AppCompatActivity() {
     }
 
     private fun startSyncGrades() {
-        if (!JwApiClient.hasSession(this)) {
+        if (!JwApiClient.canRestoreSession(this)) {
             promptNeedLogin()
             return
         }
@@ -521,8 +522,9 @@ class GradeInquiryActivity : AppCompatActivity() {
         syncBtn.isEnabled = true
         syncBtn.text = getString(R.string.grade_sync_button)
 
+        val merged = GradeStore.mergeSyncedGrades(allGrades, parsed)
         allGrades.clear()
-        allGrades.addAll(parsed)
+        allGrades.addAll(merged)
         GradeStore.save(filesDir, allGrades)
         GradeStore.syncToGpaCourses(filesDir, allGrades)
         renderGrades()

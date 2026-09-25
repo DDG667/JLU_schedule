@@ -271,7 +271,7 @@ class TimetableFragment : Fragment() {
             android.webkit.CookieManager.getInstance()
                 .getCookie(cn.jlu.schedule.auth.TpassConfig.IEDU_PORTAL_URL)
         }.getOrNull()?.isNotBlank() == true
-        if (!webViewSession && !JwApiClient.hasSession(ctx)) {
+        if (!webViewSession && !JwApiClient.canRestoreSession(ctx)) {
             UiFeedback.showMessage(view, getString(R.string.import_quick_need_login), ThemePaletteProvider.fromContext(ctx))
             quickImportLoginLauncher.launch(Intent(ctx, LoginActivity::class.java))
             return
