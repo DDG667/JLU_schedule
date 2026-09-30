@@ -12,6 +12,7 @@ import androidx.core.graphics.ColorUtils
 import androidx.fragment.app.Fragment
 import cn.jlu.schedule.R
 import cn.jlu.schedule.auth.TpassConfig
+import cn.jlu.schedule.remote.JwEndpoints
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 
 /** 工具页：汇聚成绩查询、绩点计算、考试安排与学业完成等教务工具（底部导航「工具」Tab） */
@@ -68,10 +69,10 @@ class ToolsFragment : Fragment() {
             CampusWebActivity.start(ctx, "https://iedu.jlu.edu.cn/jwapp/sys/cjcx/*default/index.do", getString(R.string.tools_web_grade))
         }
         view.findViewById<View>(R.id.rowWebExam)?.setOnClickListener {
-            CampusWebActivity.start(ctx, "https://iedu.jlu.edu.cn/jwapp/sys/kscx/*default/index.do", getString(R.string.tools_web_exam))
+            CampusWebActivity.start(ctx, JwEndpoints.EXAM_PAGE_URL, getString(R.string.tools_web_exam))
         }
         view.findViewById<View>(R.id.rowWebAcademic)?.setOnClickListener {
-            CampusWebActivity.start(ctx, "https://iedu.jlu.edu.cn/jwapp/sys/pyfa/*default/index.do", getString(R.string.tools_web_academic))
+            CampusWebActivity.start(ctx, JwEndpoints.ACADEMIC_PAGE_URL, getString(R.string.tools_web_academic))
         }
     }
 }

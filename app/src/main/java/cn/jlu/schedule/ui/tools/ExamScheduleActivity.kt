@@ -37,6 +37,7 @@ import cn.jlu.schedule.data.ExamItem
 import cn.jlu.schedule.data.ExamStore
 import cn.jlu.schedule.parser.ExamScheduleParser
 import cn.jlu.schedule.remote.JwApiClient
+import cn.jlu.schedule.remote.JwEndpoints
 import cn.jlu.schedule.ui.auth.LoginActivity
 import cn.jlu.schedule.ui.theme.ThemePalette
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
@@ -93,7 +94,7 @@ class ExamScheduleActivity : AppCompatActivity() {
         val webBtn = findViewById<ImageView>(R.id.examOpenWebBtn)
         webBtn.imageTintList = ColorStateList.valueOf(palette.iconTint)
         webBtn.setOnClickListener {
-            CampusWebActivity.start(this, EXAM_PAGE_URL, getString(R.string.exam_schedule_title))
+            CampusWebActivity.start(this, JwEndpoints.EXAM_PAGE_URL, getString(R.string.exam_schedule_title))
         }
 
         progressBar = findViewById(R.id.examProgressBar)
@@ -360,7 +361,7 @@ class ExamScheduleActivity : AppCompatActivity() {
             }
         }, 22000L)
 
-        syncWebView.loadUrl(EXAM_PAGE_URL)
+        syncWebView.loadUrl(JwEndpoints.EXAM_PAGE_URL)
     }
 
     private fun onFetchQuietPeriodReached() {
@@ -382,8 +383,10 @@ class ExamScheduleActivity : AppCompatActivity() {
                 ExamStore.save(filesDir, allExams)
                 renderExams()
                 UiFeedback.showMessage(listContainer, "已成功同步 ${parsed.size} 门考试安排", palette)
-            } else {
+            } else if (snapshot.isNotEmpty()) {
                 UiFeedback.showMessage(listContainer, "教务系统暂未发布考场安排", palette)
+            } else {
+                UiFeedback.showMessage(listContainer, "未能读取教务考试数据，请检查网络或重新登录", palette)
             }
         }
     }
@@ -462,7 +465,6 @@ class ExamScheduleActivity : AppCompatActivity() {
     private inner class ExamBridge {
         @JavascriptInterface
         fun onCaptured(url: String, payload: String) {
-            if (payload.length < 60) return
             if (ExamScheduleParser.isLikelyExamPayload(payload)) {
                 synchronized(capturedBuffer) { capturedBuffer.add(payload) }
                 mainHandler.removeCallbacksAndMessages(null)
@@ -482,8 +484,6 @@ class ExamScheduleActivity : AppCompatActivity() {
 
     companion object {
         private const val REQ_LOGIN = 202
-        private const val EXAM_PAGE_URL = "https://iedu.jlu.edu.cn/jwapp/sys/kscx/*default/index.do"
-
         private val EXAM_HOOK_JS = """
             (function(){
               if(window.__jluExamHooked) return; window.__jluExamHooked = true;

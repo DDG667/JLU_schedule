@@ -8,10 +8,13 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 /**
  * 教务系统端点注册表。
  *
- * 课表接口已在网页导入链路中实际验证；其余接口路径为占位，
- * 待真实账号登录抓包确认后（v2.1）再实现对应功能页面。
+ * 课表接口来自网页导入；考试与学业完成页面来自教务门户实际跳转。
  */
 object JwEndpoints {
+
+    /** 从教务门户的“我的考试安排”和“学业完成查询”入口实测跳转得到。 */
+    const val EXAM_PAGE_URL = "https://iedu.jlu.edu.cn/jwapp/sys/studentWdksapApp/*default/index.do"
+    const val ACADEMIC_PAGE_URL = "https://iedu.jlu.edu.cn/jwapp/sys/xywccx/*default/index.do"
 
     /** 课表查询接口的稳定特征（ScheduleImportCacheParser 同源） */
     const val SCHEDULE_ENDPOINT_HINT = "cxxszhxqkb.do"
@@ -63,8 +66,7 @@ object JwEndpoints {
         SemesterStartDatePolicy.inferFromCoursesOrNull(courses)
 
     /**
-     * 后续功能占位：路径特征来自金智 eMAP 平台惯例，均需真实账号抓包确认。
-     * v2.1 计划：成绩单/绩点计算、考试安排、培养方案查询。
+     * 功能路径索引。confirmed 表示已从真实门户或接口验证。
      */
     data class FeatureEndpoint(
         val key: String,
@@ -75,8 +77,8 @@ object JwEndpoints {
 
     val upcomingFeatures: List<FeatureEndpoint> = listOf(
         FeatureEndpoint("grades", "成绩查询", "jwapp/sys/cjcx/modules/cjcx/*", confirmed = false),
-        FeatureEndpoint("exams", "考试安排", "jwapp/sys/kscx/modules/*", confirmed = false),
-        FeatureEndpoint("cultivate", "培养方案", "jwapp/sys/pyfa/modules/*", confirmed = false),
+        FeatureEndpoint("exams", "考试安排", "jwapp/sys/studentWdksapApp/modules/wdksap/*", confirmed = true),
+        FeatureEndpoint("cultivate", "学业完成查询", "jwapp/sys/xywccx/modules/xywccx/*", confirmed = true),
         FeatureEndpoint("gpa", "绩点计算", "（本地计算，依赖成绩查询）", confirmed = false)
     )
 }

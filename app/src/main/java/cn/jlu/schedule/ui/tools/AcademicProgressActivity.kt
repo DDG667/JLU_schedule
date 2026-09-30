@@ -39,6 +39,7 @@ import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.data.GradeStore
 import cn.jlu.schedule.parser.PyfaTranscriptParser
 import cn.jlu.schedule.remote.JwApiClient
+import cn.jlu.schedule.remote.JwEndpoints
 import cn.jlu.schedule.ui.auth.LoginActivity
 import cn.jlu.schedule.ui.theme.ThemePalette
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
@@ -54,7 +55,7 @@ import javax.net.ssl.HttpsURLConnection
 
 /**
  * 学业完成查询界面：
- * 1. 支持直接从教务培养方案原网页（sys/pyfa）拉取真实学分达成度与各大模块完成情况；
+ * 1. 支持从教务学业完成查询页拉取真实学分达成度；
  * 2. 彻底废除比例平摊计算，本地成绩改为智能启发式分类；
  * 3. 支持全功能手动编辑指标与已修学分，自由增删模块；
  * 4. 教务原系统网页直达。
@@ -111,7 +112,7 @@ class AcademicProgressActivity : AppCompatActivity() {
         val webBtn = findViewById<ImageView>(R.id.academicOpenWebBtn)
         webBtn.imageTintList = ColorStateList.valueOf(palette.iconTint)
         webBtn.setOnClickListener {
-            CampusWebActivity.start(this, ACADEMIC_PAGE_URL, getString(R.string.academic_progress_title))
+            CampusWebActivity.start(this, JwEndpoints.ACADEMIC_PAGE_URL, getString(R.string.academic_progress_title))
         }
 
         percentText = findViewById(R.id.academicPercentText)
@@ -315,7 +316,7 @@ class AcademicProgressActivity : AppCompatActivity() {
             }
         }
 
-        syncWebView.loadUrl(ACADEMIC_PAGE_URL)
+        syncWebView.loadUrl(JwEndpoints.ACADEMIC_PAGE_URL)
     }
 
     private fun handleFetchLogin() {
@@ -330,7 +331,7 @@ class AcademicProgressActivity : AppCompatActivity() {
             if (result is CasLoginResult.Success) {
                 JwApiClient.syncJarToWebView(this@AcademicProgressActivity)
                 if (!fetchFinished.get()) {
-                    syncWebView.post { syncWebView.loadUrl(ACADEMIC_PAGE_URL) }
+                    syncWebView.post { syncWebView.loadUrl(JwEndpoints.ACADEMIC_PAGE_URL) }
                 }
             } else {
                 finishSync(success = false, message = "教务会话已过期，请重新登录")
@@ -422,7 +423,7 @@ class AcademicProgressActivity : AppCompatActivity() {
                 if (host.isNotBlank()) {
                     cookieManager.setCookie("https://$host/", cookieHeader)
                     cookieManager.setCookie("https://$host/jwapp/", cookieHeader)
-                    cookieManager.setCookie("https://$host/jwapp/sys/pyfa/", cookieHeader)
+                    cookieManager.setCookie("https://$host/jwapp/sys/xywccx/", cookieHeader)
                 }
             }
             cookieManager.flush()
@@ -700,8 +701,6 @@ class AcademicProgressActivity : AppCompatActivity() {
         private const val TAG = "AcademicProgress"
         private const val REQ_LOGIN = 301
         private const val SYNC_TIMEOUT_MS = 25000L
-        private const val ACADEMIC_PAGE_URL = "https://iedu.jlu.edu.cn/jwapp/sys/pyfa/*default/index.do"
-
         private val PYFA_HOOK_JS = """
             (function(){
               if(window.__jluPyfaHooked) return; window.__jluPyfaHooked = true;

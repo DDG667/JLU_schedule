@@ -15,6 +15,7 @@ class PyfaTranscriptParserTest {
         assertTrue(PyfaTranscriptParser.isLikelyPyfaPayload("""{"FAJDMC":"专业核心课","YQJDXF":40}"""))
         assertTrue(PyfaTranscriptParser.isLikelyPyfaPayload("""{"type":"pyfa_dom_extract","modules":[]}"""))
         assertTrue(PyfaTranscriptParser.isLikelyPyfaPayload("""{"datas":{"xywcqk":{"rows":[]},"YQXF":160}}"""))
+        assertTrue(PyfaTranscriptParser.isLikelyPyfaPayload("""{"datas":{"grpyfacx":{"rows":[{"PYFAMC":"主修培养方案","ZSYQXF":164,"YWCXF":77.5}]}}}"""))
 
         assertFalse(PyfaTranscriptParser.isLikelyPyfaPayload(""))
         assertFalse(PyfaTranscriptParser.isLikelyPyfaPayload("""{"datas":{"xscjcx":{"rows":[]}}}"""))
@@ -75,6 +76,21 @@ class PyfaTranscriptParserTest {
         assertEquals("专业选修课", plan.requirements[1].categoryName)
         assertEquals(35.0, plan.requirements[1].requiredCredits, 0.001)
         assertEquals(20.5, plan.requirements[1].earnedCredits, 0.001)
+    }
+
+    @Test
+    fun `parses current academic completion endpoint`() {
+        val payload = """
+            {"datas":{"grpyfacx":{"rows":[
+              {"PYFAMC":"主修培养方案","ZSYQXF":164.0,"YWCXF":77.5}
+            ]}}}
+        """.trimIndent()
+
+        val plan = PyfaTranscriptParser.parse(payload)
+        assertNotNull(plan)
+        assertEquals(164.0, plan!!.totalRequiredCredits, 0.001)
+        assertEquals(77.5, plan.totalEarnedCredits, 0.001)
+        assertEquals("主修培养方案", plan.requirements.single().categoryName)
     }
 
     @Test

@@ -37,6 +37,7 @@ class ExamScheduleParserTest {
     @Test
     fun `recognizes exam payload correctly`() {
         assertTrue(ExamScheduleParser.isLikelyExamPayload(validPayload))
+        assertTrue(ExamScheduleParser.isLikelyExamPayload("""{"datas":{"cxxsksap":{"rows":[]}},"code":"0"}"""))
         assertFalse(ExamScheduleParser.isLikelyExamPayload("""{"datas":{"xskcb":{"rows":[]}}}"""))
         assertFalse(ExamScheduleParser.isLikelyExamPayload("plain text"))
     }

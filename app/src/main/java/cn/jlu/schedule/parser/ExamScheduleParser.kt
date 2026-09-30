@@ -12,7 +12,7 @@ import java.util.Locale
 import java.util.UUID
 
 /**
- * 金智 jwapp 考试安排载荷解析（sys/kscx 或 sys/wdksap 等接口返回的 datas.*.rows）。
+ * 金智 jwapp 考试安排载荷解析（studentWdksapApp 的 datas.*.rows）。
  */
 object ExamScheduleParser {
 
@@ -20,7 +20,8 @@ object ExamScheduleParser {
 
     fun isLikelyExamPayload(text: String): Boolean {
         val hasRows = text.contains("\"rows\"") && text.contains("\"datas\"")
-        val hasKeywords = text.contains("KCM") || text.contains("KSSJ") || text.contains("xskscx") || text.contains("wdksap")
+        val hasKeywords = text.contains("KCM") || text.contains("KSSJ") || text.contains("xskscx") ||
+            text.contains("wdksap") || text.contains("cxxsksap")
         return hasRows && hasKeywords
     }
 

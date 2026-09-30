@@ -16,23 +16,25 @@ import kotlin.math.round
 
 /**
  * 培养方案与学业完成情况载荷解析器。
- * 支持解析金智 eMAP (sys/pyfa) 网络拦截 JSON 与 WebView DOM 提取的结构化数据。
+ * 支持解析金智 eMAP 学业完成查询数据与 WebView DOM 提取的结构化数据。
  */
 object PyfaTranscriptParser {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    private val NAME_KEYS = listOf("FAJDMC", "JDMC", "KCLBMC", "KCXZMC", "MKMC", "MC", "NAME", "TITLE", "name", "categoryName")
-    private val REQ_KEYS = listOf("YQJDXF", "YQXF", "ZXF", "REQUIRED_CREDITS", "REQUIRED", "requiredCredits", "required", "yqxf", "zxf")
-    private val EARNED_KEYS = listOf("YHDXF", "HDXF", "YXXF", "PASSED_CREDITS", "EARNED", "earnedCredits", "earned", "yhdxf", "hdxf", "yxxf")
+    private val NAME_KEYS = listOf("FAJDMC", "JDMC", "KCLBMC", "KCXZMC", "MKMC", "PYFAMC", "MC", "NAME", "TITLE", "name", "categoryName")
+    private val REQ_KEYS = listOf("YQJDXF", "ZSYQXF", "YQXF", "ZXF", "REQUIRED_CREDITS", "REQUIRED", "requiredCredits", "required", "yqxf", "zxf")
+    private val EARNED_KEYS = listOf("YHDXF", "YWCXF", "WCXF", "HDXF", "YXXF", "PASSED_CREDITS", "EARNED", "earnedCredits", "earned", "yhdxf", "hdxf", "yxxf")
 
     fun isLikelyPyfaPayload(text: String): Boolean {
         if (text.isBlank()) return false
         if (text.contains("\"pyfa_dom_extract\"") || text.contains("\"pyfa\"") || text.contains("\"pyfaTree\"")) return true
         if (text.contains("\"FAJDMC\"") || text.contains("\"YQJDXF\"") || text.contains("\"YHDXF\"")) return true
-        if (text.contains("\"xsgzywcqk\"") || text.contains("\"xywcqk\"") || text.contains("\"wdpyfa\"")) return true
+        if (text.contains("\"xsgzywcqk\"") || text.contains("\"xywcqk\"") || text.contains("\"wdpyfa\"") ||
+            text.contains("\"grpyfacx\"") || text.contains("\"cxxsscfa\"")) return true
         return text.contains("\"datas\"") && (
-            text.contains("\"YQXF\"") || text.contains("\"HDXF\"") || text.contains("\"YXXF\"") ||
+            text.contains("\"YQXF\"") || text.contains("\"ZSYQXF\"") || text.contains("\"YWCXF\"") ||
+            text.contains("\"WCXF\"") || text.contains("\"HDXF\"") || text.contains("\"YXXF\"") ||
             text.contains("\"requiredCredits\"") || text.contains("\"earnedCredits\"")
         )
     }

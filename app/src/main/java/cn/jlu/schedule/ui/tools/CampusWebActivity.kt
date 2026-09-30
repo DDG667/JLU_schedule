@@ -94,7 +94,7 @@ class CampusWebActivity : AppCompatActivity() {
             }
         }
 
-        if (targetUrl.contains("pyfa")) {
+        if (targetUrl.contains("xywccx")) {
             webView.addJavascriptInterface(object {
                 @android.webkit.JavascriptInterface
                 fun onCaptured(url: String, payload: String) {
@@ -118,7 +118,7 @@ class CampusWebActivity : AppCompatActivity() {
                 // 页面跳转后同步最新 Cookie 回原生 CookieJar
                 JwApiClient.importAllWebViewCookies(this@CampusWebActivity)
 
-                if (url?.contains("pyfa") == true) {
+                if (url?.contains("xywccx") == true) {
                     view?.postDelayed({
                         val extractJs = """
                             (function(){
