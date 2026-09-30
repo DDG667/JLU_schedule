@@ -42,6 +42,8 @@ import cn.jlu.schedule.ui.auth.LoginActivity
 import cn.jlu.schedule.ui.theme.ThemePalette
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 import cn.jlu.schedule.ui.theme.UiFeedback
+import cn.jlu.schedule.ui.theme.applySystemBarPadding
+import cn.jlu.schedule.ui.theme.applySystemBarIcons
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -76,8 +78,10 @@ class ExamScheduleActivity : AppCompatActivity() {
         setTheme(ThemePaletteProvider.themeStyleFor(AppPreferences.getThemeColor(this)))
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_exam_schedule)
+        findViewById<View>(R.id.examRoot).applySystemBarPadding()
 
         palette = ThemePaletteProvider.fromContext(this)
+        window.applySystemBarIcons(palette.isDark)
         initViews()
         loadLocalData()
         setupSyncWebView()

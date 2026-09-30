@@ -44,6 +44,8 @@ import cn.jlu.schedule.ui.auth.LoginActivity
 import cn.jlu.schedule.ui.theme.ThemePalette
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 import cn.jlu.schedule.ui.theme.UiFeedback
+import cn.jlu.schedule.ui.theme.applySystemBarPadding
+import cn.jlu.schedule.ui.theme.applySystemBarIcons
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -90,8 +92,10 @@ class GradeInquiryActivity : AppCompatActivity() {
         setTheme(ThemePaletteProvider.themeStyleFor(AppPreferences.getThemeColor(this)))
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_grade_inquiry)
+        findViewById<View>(R.id.gradeRoot).applySystemBarPadding()
 
         palette = ThemePaletteProvider.fromContext(this)
+        window.applySystemBarIcons(palette.isDark)
         initViews()
         loadLocalData()
         setupSyncWebView()
