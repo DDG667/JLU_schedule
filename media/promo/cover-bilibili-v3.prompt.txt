@@ -1,0 +1,16 @@
+Use case: compositing and text-localization.
+Asset type: revised landscape Bilibili video thumbnail, keep the source image's near-16:9 aspect ratio.
+Input image 1: the existing finished thumbnail; this is the edit target.
+Primary request: Update this cover to emphasize useful app features. Remove every occurrence of "我自己做！" and any creator-centered wording. Preserve the authentic timetable phone on the right, the existing app icon and JLU Schedule brand at the top, and the warm cream, mint green and orange visual style.
+Text changes, exact Chinese:
+Main headline line 1 remains "吉大课表".
+Replace the orange second headline with "导课表 · 算绩点".
+Keep the badge "开源 · 无广告", but make it slightly smaller to leave more room for the useful functions.
+Replace the three bottom feature chips with four clear rounded feature cards in a tidy 2-by-2 grid, all within the left portion:
+Top left: "自动化导入", with a small calendar/download icon.
+Top right: "绩点计算器", with a small calculator icon.
+Bottom left: "成绩查询", with a small grade/document icon.
+Bottom right: "考试安排", with a small calendar/check icon.
+Composition: The four feature names should be much larger and more prominent than the old chips, especially the first two. Keep the headline bold and highly readable, but resize the second headline enough to fit cleanly without crowding the phone. Reduce decorative doodles if more breathing room is needed. Maintain clear hierarchy: 吉大课表, then 导课表·算绩点, then the useful feature cards. Leave a safe margin at every edge and don't put text over the phone.
+Invariants: preserve the phone's position, authentic app display contents, pastel timetable, course labels, screenshot details and existing app identity. Keep the overall palette and cheerful polished product-thumbnail aesthetic.
+Avoid: duplicate cards, spelling errors, other text, people, university logos, watermarks, "我自己做", "自制", unsupported claims such as automatic CAPTCHA solving or official academic GPA. The cover should feel like a useful campus app with handy tools.
