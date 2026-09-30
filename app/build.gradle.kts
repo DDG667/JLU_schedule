@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -12,14 +14,33 @@ android {
         applicationId = "cn.jlu.schedule"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "2.1.0"
+        versionCode = 6
+        versionName = "2.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    val localSigningFile = rootProject.file("local-signing.properties")
+    val localSigningProperties = Properties()
+    if (localSigningFile.isFile) {
+        localSigningFile.inputStream().use(localSigningProperties::load)
+    }
+    val hasLocalSigning = localSigningProperties.getProperty("storePassword")?.isNotBlank() == true &&
+        localSigningProperties.getProperty("keyPassword")?.isNotBlank() == true
+    signingConfigs {
+        if (hasLocalSigning) {
+            create("official") {
+                storeFile = rootProject.file("../apk-key/key.jks")
+                storePassword = localSigningProperties.getProperty("storePassword")
+                keyAlias = "JFyuhong"
+                keyPassword = localSigningProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (hasLocalSigning) signingConfig = signingConfigs.getByName("official")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

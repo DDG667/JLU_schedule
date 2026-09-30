@@ -1,10 +1,10 @@
 package cn.jlu.schedule.update.download
 
 import android.content.Context
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import cn.jlu.schedule.update.model.UpdatePayload
+import cn.jlu.schedule.update.security.UpdateSecurityConfig
 import java.io.File
 import java.security.MessageDigest
 
@@ -58,15 +58,10 @@ object ApkVerifier {
             MessageDigest.getInstance("SHA-256").digest(certBytes).joinToString("") { "%02x".format(it) }
         }
 
-        val certMatched = certFingerprints.any { it.equals(payload.apk.signerSha256, ignoreCase = true) }
-        if (!certMatched) {
-            val isDebug = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-            if (isDebug) {
-                // 开发测试构建允许提示放行
-                android.util.Log.w("ApkVerifier", "Debug 环境检测到证书不一致 (实际: $certFingerprints)，放行测试")
-            } else {
-                throw SecurityException("APK 签名证书指纹不符: 期望 ${payload.apk.signerSha256}, 实际 ${certFingerprints.joinToString()}")
-            }
+        if (!payload.apk.signerSha256.equals(UpdateSecurityConfig.OFFICIAL_SIGNER_SHA256, ignoreCase = true) ||
+            certFingerprints.none { it.equals(UpdateSecurityConfig.OFFICIAL_SIGNER_SHA256, ignoreCase = true) }
+        ) {
+            throw SecurityException("APK 签名证书指纹不符: 实际 ${certFingerprints.joinToString()}")
         }
     }
 

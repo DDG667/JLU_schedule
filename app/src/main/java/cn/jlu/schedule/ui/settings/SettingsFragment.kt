@@ -231,7 +231,7 @@ class SettingsFragment : Fragment() {
             checkUpdateRow.isEnabled = false
             viewLifecycleOwner.lifecycleScope.launch {
                 val repo = cn.jlu.schedule.update.repository.UpdateRepository()
-                val result = repo.checkUpdate(requireContext(), force = true, allowInDebug = true)
+                val result = repo.checkUpdate(requireContext(), force = true)
                 if (!isAdded) return@launch
                 versionText.text = "v$currentVersionName"
                 checkUpdateRow.isEnabled = true
@@ -244,7 +244,11 @@ class SettingsFragment : Fragment() {
                         )
                     }
                     is cn.jlu.schedule.update.model.UpdateCheckResult.NoUpdate -> {
-                        UiFeedback.showMessage(view, getString(R.string.update_is_latest), palette)
+                        UiFeedback.showMessage(
+                            view,
+                            result.reason.ifBlank { getString(R.string.update_is_latest) },
+                            palette
+                        )
                     }
                     is cn.jlu.schedule.update.model.UpdateCheckResult.MirrorMismatch -> {
                         androidx.appcompat.app.AlertDialog.Builder(requireContext())

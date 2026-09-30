@@ -180,4 +180,19 @@ class UpdateManifestVerifierTest {
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull()?.message?.contains("SHA-256") == true)
     }
+
+    @Test
+    fun testNonOfficialApkSignerFailsEvenWithValidManifestSignature() {
+        val otherSigner = "a".repeat(64)
+        val payload = validPayloadJson.replace(
+            "7ed7c719a6abb18d1eb014a18c173532fd4f11fb4bd350f003245549135dd6dc",
+            otherSigner
+        )
+        val result = UpdateManifestVerifier.verifyAndParse(
+            createSignedEnvelope(payload),
+            trustedKeys = mapOf(keyId to pubKeyB64)
+        )
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is SecurityException)
+    }
 }

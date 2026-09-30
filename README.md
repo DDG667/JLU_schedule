@@ -8,7 +8,7 @@ JLU_schedule 是一个面向吉大学生的课表工具，支持通过教务网�
 
 ## 安装包下载
 
-- Android: 前往Releases页下载[Releases](https://github.com/JFyuhong/JLU_schedule/releases)
+- Android: 从 [国内下载页](https://jfyuhong.top/updates/android/) 或 [GitHub Releases](https://github.com/JFyuhong/JLU_schedule/releases) 下载正式安装包
 - iOS / 鸿蒙：源码位于 `ios/` 与 `harmonyos/` 目录，需自行用 Xcode / DevEco Studio 构建签名（构建说明见 PORTING.md）
 - iOS 备注: 如果你能帮我搞定`99$/每年`的开发者计划的话，上架 TestFlight 也不是不行😂
 
@@ -79,6 +79,10 @@ JLU_schedule 是一个面向吉大学生的课表工具，支持通过教务网�
 	- `VPN.url`：校外导入入口
 
 ## 更新日志
+- v2.2.0（Android）
+	- 新增应用内更新：国内站点与 GitHub 双镜像，更新清单验签，APK 哈希、包名、版本号和正式证书校验，支持断点续传与镜像切换
+	- 修复课程时间冲突时被置顶课程遮挡的展示问题，完善工具页和统一认证登录稳定性
+	- 修复更新检查在断网后被延迟 24 小时、下载弹窗关闭后继续下载等问题
 - v2.1
 	- 底部导航新增"工具"页，加入绩点计算器：支持从教务系统一键导入全部成绩自动计算，也可手动录入百分制 / 五级制成绩；实时计算保研绩点（90+→4.0 档位映射）、加权平均分、算术平均分，逐门计入/排除、重修同课程号自动取最高并本地持久化；计算规则原生改造自 DailyPotato/JLU-GPA-Calculator 与 Coldymemos/JLU-GPA-Calculator-for-Windows-Desktop（已获原作者同意），非官方规则，以学院文件为准
 	- 成绩导入采用隐藏 WebView 捕获成绩页自身接口响应（教务网关拦截原生直连），会话失效时按"迁移 WebView Cookie → CAS TGT 续链 → 凭据静默重登"三级自动恢复，均不可用再引导登录并自动重试

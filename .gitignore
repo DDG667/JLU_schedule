@@ -49,8 +49,10 @@ replay_pid*
 **/captures/
 **/outputs/
 app/release
+local-signing.properties
 scripts/keys/
 *.pem
+!app/src/main/res/raw/*.pem
 release_keys/
 
 

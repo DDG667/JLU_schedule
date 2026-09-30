@@ -244,7 +244,7 @@ class UpdateRepositoryTest {
     }
 
     @Test
-    fun testCheckUpdateDebugBuildFilteredUnlessForcedOrAllowed() = runBlocking {
+    fun testCheckUpdateDebugBuildFilteredEvenWhenForcedUnlessExplicitlyAllowed() = runBlocking {
         val repo = UpdateRepository(
             trustedKeys = mapOf(keyId to pubKeyB64),
             appVersionCodeOverride = 5,
@@ -254,7 +254,7 @@ class UpdateRepositoryTest {
         val url1 = server1.url("/updates/android/stable.json").toString()
 
         // Debug 下且未 force 未 allowInDebug -> NoUpdate 无请求
-        val result = repo.checkUpdate(testContext, force = false, endpoints = listOf(url1), allowInDebug = false)
+        val result = repo.checkUpdate(testContext, force = true, endpoints = listOf(url1), allowInDebug = false)
         assertTrue(result is UpdateCheckResult.NoUpdate)
         assertEquals(0, server1.requestCount)
 
@@ -262,6 +262,21 @@ class UpdateRepositoryTest {
         server1.enqueue(MockResponse().setBody(createSignedEnvelopeJson(versionCode = 6)))
         val resultAllowed = repo.checkUpdate(testContext, force = false, endpoints = listOf(url1), allowInDebug = true)
         assertTrue(resultAllowed is UpdateCheckResult.UpdateAvailable)
+    }
+
+    @Test
+    fun testFailedAutoCheckDoesNotThrottleRetry() = runBlocking {
+        server1.enqueue(MockResponse().setResponseCode(503))
+        server1.enqueue(MockResponse().setBody(createSignedEnvelopeJson()))
+        val repo = UpdateRepository(
+            trustedKeys = mapOf(keyId to pubKeyB64),
+            appVersionCodeOverride = 5,
+            isDebugOverride = false
+        )
+        val url = server1.url("/updates/android/stable.json").toString()
+        assertTrue(repo.checkAutoUpdate(testContext, listOf(url)) is UpdateCheckResult.Error)
+        assertEquals(0L, AppPreferences.getLastUpdateCheckTime(testContext))
+        assertTrue(repo.checkAutoUpdate(testContext, listOf(url)) is UpdateCheckResult.UpdateAvailable)
     }
 }
 

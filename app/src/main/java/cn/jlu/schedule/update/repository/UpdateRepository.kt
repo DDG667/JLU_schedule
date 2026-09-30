@@ -42,7 +42,7 @@ class UpdateRepository(
     ): UpdateCheckResult {
         val lastCheck = AppPreferences.getLastUpdateCheckTime(context)
         val now = System.currentTimeMillis()
-        if (now - lastCheck < 24 * 3600 * 1000L) {
+        if (lastCheck <= now && now - lastCheck < 24 * 3600 * 1000L) {
             return UpdateCheckResult.NoUpdate("距离上次检查更新不足24小时")
         }
         return checkUpdate(context, force = false, endpoints = endpoints)
@@ -58,7 +58,7 @@ class UpdateRepository(
         allowInDebug: Boolean = false
     ): UpdateCheckResult {
         val isDebug = isDebugApp(context)
-        if (!force && !allowInDebug && isDebug) {
+        if (!allowInDebug && isDebug) {
             return UpdateCheckResult.NoUpdate("Debug 构建默认不接入稳定版更新清单")
         }
 
@@ -73,20 +73,21 @@ class UpdateRepository(
             }.awaitAll()
         }
 
-        // 记录本次检查时间
-        AppPreferences.setLastUpdateCheckTime(context, System.currentTimeMillis())
-
         val successes = outcomes.filter { it.result.isSuccess }
         if (successes.isEmpty()) {
             val allErrors = outcomes.mapNotNull { it.result.exceptionOrNull()?.message }
             val allOlder = allErrors.isNotEmpty() && allErrors.all { it.contains("未高于当前版本") }
             return if (allOlder) {
+                AppPreferences.setLastUpdateCheckTime(context, System.currentTimeMillis())
                 UpdateCheckResult.NoUpdate("当前已是最新版本")
             } else {
                 val errorSummary = if (allErrors.isNotEmpty()) allErrors.distinct().joinToString("; ") else "网络连接异常"
                 UpdateCheckResult.Error("检查更新失败: $errorSummary")
             }
         }
+
+        // 网络失败不计入 24 小时间隔，避免断网后长期错过更新。
+        AppPreferences.setLastUpdateCheckTime(context, System.currentTimeMillis())
 
         // 双端一致性检测：两端若返回相同的版本号，必须提供完全相同的 APK SHA-256
         if (successes.size >= 2) {
@@ -133,12 +134,14 @@ class UpdateRepository(
             val call = client.newCall(req)
             val resp = call.execute()
             resp.use { response ->
-                val duration = System.currentTimeMillis() - start
+                if (url.startsWith("https://", ignoreCase = true) && !response.request.url.isHttps) {
+                    return FetchOutcome(url, Result.failure(SecurityException("清单重定向到了非 HTTPS 地址")), System.currentTimeMillis() - start)
+                }
                 if (!response.isSuccessful) {
-                    return FetchOutcome(url, Result.failure(Exception("HTTP ${response.code}")), duration)
+                    return FetchOutcome(url, Result.failure(Exception("HTTP ${response.code}")), System.currentTimeMillis() - start)
                 }
                 val body = response.body?.string()
-                    ?: return FetchOutcome(url, Result.failure(Exception("响应体为空")), duration)
+                    ?: return FetchOutcome(url, Result.failure(Exception("响应体为空")), System.currentTimeMillis() - start)
 
                 val verified = UpdateManifestVerifier.verifyAndParse(
                     envelopeJson = body,
@@ -147,7 +150,7 @@ class UpdateRepository(
                     currentSdk = currentSdk,
                     checkVersionNewer = true
                 )
-                FetchOutcome(url, verified, duration)
+                FetchOutcome(url, verified, System.currentTimeMillis() - start)
             }
         } catch (e: Exception) {
             FetchOutcome(url, Result.failure(e), System.currentTimeMillis() - start)

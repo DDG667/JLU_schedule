@@ -4,10 +4,12 @@ import android.content.Context
 import cn.jlu.schedule.update.model.DownloadProgress
 import cn.jlu.schedule.update.model.UpdatePayload
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -57,11 +59,10 @@ class ApkDownloader(
             val partFile = File(updatesDir, "${payload.apk.sha256}.part")
 
             // 2. 构建镜像尝试顺序（优先选用清单响应更快的源）
-            val sortedMirrors = payload.apk.mirrors.sortedWith(
-                compareByDescending { mirror ->
-                    if (preferredMirror != null && mirror.contains(preferredMirror.substringBefore("/updates/"))) 1 else 0
-                }
-            )
+            val preferredHost = preferredMirror?.toHttpUrlOrNull()?.host
+            val sortedMirrors = payload.apk.mirrors.sortedWith(compareByDescending { mirror ->
+                if (preferredHost != null && mirror.toHttpUrlOrNull()?.host == preferredHost) 1 else 0
+            })
 
             var lastError: Exception? = null
 
@@ -98,12 +99,15 @@ class ApkDownloader(
                     )
                     return@runCatching finalApkFile
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     lastError = e
                     // 若当前镜像下载失败，保留部分文件以备下一个镜像续传或由下一个镜像重头处理
                 }
             }
 
             throw lastError ?: IllegalStateException("所有镜像源下载均失败")
+        }.also { result ->
+            result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
         }
     }
 
@@ -132,13 +136,19 @@ class ApkDownloader(
         val resp = call.execute()
 
         resp.use { response ->
+            if (mirrorUrl.startsWith("https://", ignoreCase = true) && !response.request.url.isHttps) {
+                throw SecurityException("APK 下载重定向到了非 HTTPS 地址")
+            }
             if (response.code == 416) {
                 // 416 Range Not Satisfiable: 清除临时文件重新请求
                 partFile.delete()
                 startOffset = 0L
                 val retryCall = client.newCall(Request.Builder().url(mirrorUrl).build())
                 retryCall.execute().use { retryResp ->
-                    if (!retryResp.isSuccessful) throw Exception("HTTP ${retryResp.code} from $mirrorUrl")
+                    if (mirrorUrl.startsWith("https://", ignoreCase = true) && !retryResp.request.url.isHttps) {
+                        throw SecurityException("APK 下载重定向到了非 HTTPS 地址")
+                    }
+                    if (retryResp.code != 200) throw Exception("HTTP ${retryResp.code} from $mirrorUrl")
                     writeStreamToPart(retryResp.body?.byteStream(), partFile, 0L, targetSize, append = false, onProgress)
                 }
                 return
@@ -148,6 +158,17 @@ class ApkDownloader(
                 throw Exception("HTTP ${response.code} from $mirrorUrl")
             }
 
+            if (response.code == 206) {
+                val contentRange = response.header("Content-Range")
+                val match = contentRange?.let { Regex("bytes (\\d+)-(\\d+)/(\\d+)").matchEntire(it) }
+                    ?: throw IllegalStateException("断点续传响应缺少有效 Content-Range")
+                val rangeStart = match.groupValues[1].toLong()
+                val rangeEnd = match.groupValues[2].toLong()
+                val rangeTotal = match.groupValues[3].toLong()
+                if (rangeStart != startOffset || rangeEnd < rangeStart || rangeTotal != targetSize) {
+                    throw IllegalStateException("断点续传响应范围与请求不符")
+                }
+            }
             val append = (response.code == 206 && startOffset > 0)
             val currentOffset = if (append) startOffset else 0L
             writeStreamToPart(response.body?.byteStream(), partFile, currentOffset, targetSize, append, onProgress)
@@ -174,6 +195,7 @@ class ApkDownloader(
             var read: Int
             while (stream.read(buf).also { read = it } != -1) {
                 coroutineContext.ensureActive()
+                if (downloaded + read > totalBytes) throw IllegalStateException("APK 下载数据超出清单声明的大小")
                 out.write(buf, 0, read)
                 downloaded += read
                 bytesSinceLastSample += read

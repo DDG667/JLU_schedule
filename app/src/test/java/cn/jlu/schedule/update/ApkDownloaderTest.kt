@@ -215,4 +215,13 @@ class ApkDownloaderTest {
         assertArrayEquals(fullBytes, file.readBytes())
         assertEquals(2, requestCount)
     }
+
+    @Test
+    fun testRejectsMoreBytesThanSignedManifestDeclares() = runBlocking {
+        server1.enqueue(MockResponse().setBody(Buffer().write(ByteArray(12))))
+        val payload = samplePayload(10L, listOf(server1.url("/app.apk").toString()))
+        val result = ApkDownloader(verifier = { _, _, _ -> }).downloadApk(testContext, payload)
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("超出") == true)
+    }
 }

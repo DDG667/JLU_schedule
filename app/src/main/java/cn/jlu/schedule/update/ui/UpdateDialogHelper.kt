@@ -22,6 +22,8 @@ import cn.jlu.schedule.update.model.UpdatePayload
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -47,7 +49,11 @@ object UpdateDialogHelper {
             .setCancelable(true)
             .create()
 
-        dialog.setOnDismissListener { onDismiss() }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        dialog.setOnDismissListener {
+            scope.cancel()
+            onDismiss()
+        }
 
         val root = view.findViewById<LinearLayout>(R.id.updateDialogRoot)
         val title = view.findViewById<TextView>(R.id.updateDialogTitle)
@@ -153,7 +159,6 @@ object UpdateDialogHelper {
             btnPrimary.text = activity.getString(R.string.update_downloading)
             btnSecondary.text = activity.getString(R.string.update_action_cancel)
 
-            val scope = CoroutineScope(Dispatchers.Main)
             downloadJob = scope.launch {
                 val result = downloader.downloadApk(
                     context = activity,

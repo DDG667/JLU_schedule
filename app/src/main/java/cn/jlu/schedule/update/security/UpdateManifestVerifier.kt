@@ -97,6 +97,9 @@ object UpdateManifestVerifier {
         if (!payload.apk.signerSha256.lowercase().matches(sha256Regex)) {
             throw IllegalArgumentException("无效的签名证书 SHA-256 格式: ${payload.apk.signerSha256}")
         }
+        if (!payload.apk.signerSha256.equals(UpdateSecurityConfig.OFFICIAL_SIGNER_SHA256, ignoreCase = true)) {
+            throw SecurityException("清单中的 APK 签名证书不是官方发布证书")
+        }
         if (payload.apk.mirrors.isEmpty()) {
             throw IllegalArgumentException("下载镜像地址列表不可为空")
         }
