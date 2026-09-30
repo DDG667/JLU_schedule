@@ -15,6 +15,8 @@
 
 `assets/` 中的画面来自独立 `Codex_JLU_Promo` 模拟器，用 ADB 截取。课程、教师、成绩、考程均为虚构演示数据，没有校园账号或真实个人成绩。准备脚本在写入前验证模拟器名称，避免修改原有测试设备的数据。
 
+B站投稿用的大字封面见 `cover-bilibili-v2.png`；标题、配乐候选、官方试听链接及投稿简介见 [MUSIC_AND_TITLE.md](MUSIC_AND_TITLE.md)。封面采用内置 imagegen，生成提示词保存在 `cover-bilibili-v2.prompt.txt`。
+
 导出文件在 `build/promo/`：
 
 - `JLU_Schedule_Promo_60s.mp4`：带字幕及原创合成器音乐的成片。
