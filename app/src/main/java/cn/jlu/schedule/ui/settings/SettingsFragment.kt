@@ -33,6 +33,7 @@ import cn.jlu.schedule.R
 import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.data.ImportedScheduleStorage
 import cn.jlu.schedule.data.ScheduleRepository
+import cn.jlu.schedule.data.SemesterStartDatePolicy
 import cn.jlu.schedule.domain.SectionTimes
 import cn.jlu.schedule.ui.theme.ThemePalette
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
@@ -553,20 +554,56 @@ class SettingsFragment : Fragment() {
 
     private fun showSemesterDatePicker(dateTextView: TextView) {
         val ctx = context ?: return
+        val owner = viewLifecycleOwner
         val current = ScheduleRepository.timetable.value?.semesterStart
             ?: ImportedScheduleStorage.getActiveSemesterStartDate(ctx.filesDir)
+        val dateFormat = DateTimeFormatter.ofPattern("yyyy/M/d")
+
+        fun saveDate(date: LocalDate) {
+            owner.lifecycleScope.launch {
+                ScheduleRepository.setActiveSemesterStartDate(ctx, date)
+                    .onSuccess {
+                        dateTextView.text = date.format(dateFormat)
+                        UiFeedback.showMessage(
+                            dateTextView,
+                            getString(R.string.settings_first_week_saved, date.format(dateFormat)),
+                            paletteForFeedback()
+                        )
+                    }
+                    .onFailure {
+                        UiFeedback.showMessage(
+                            dateTextView,
+                            getString(R.string.settings_first_week_save_failed),
+                            paletteForFeedback()
+                        )
+                    }
+            }
+        }
+
         DatePickerDialog(
             ctx,
             { _, year, month, dayOfMonth ->
                 val selected = LocalDate.of(year, month + 1, dayOfMonth)
-                viewLifecycleOwner.lifecycleScope.launch {
-                    ScheduleRepository.setActiveSemesterStartDate(ctx, selected)
+                val monday = SemesterStartDatePolicy.normalizeToWeekStart(selected)
+                if (selected != monday) {
+                    androidx.appcompat.app.AlertDialog.Builder(ctx)
+                        .setTitle(R.string.settings_first_week_adjust_title)
+                        .setMessage(getString(
+                            R.string.settings_first_week_adjust_message,
+                            selected.format(dateFormat),
+                            monday.format(dateFormat)
+                        ))
+                        .setPositiveButton(R.string.settings_first_week_adjust_save) { _, _ -> saveDate(monday) }
+                        .setNegativeButton(R.string.action_cancel, null)
+                        .show()
+                } else {
+                    saveDate(monday)
                 }
             },
             current.year,
             current.monthValue - 1,
             current.dayOfMonth
-        ).show()
+        ).apply { setTitle(R.string.settings_row_first_week) }.show()
     }
 
     private fun startCrop(sourceUri: Uri) {

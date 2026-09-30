@@ -34,9 +34,14 @@
     <string name="settings_open_timetable_manage">打开课表管理页</string>
     <string name="settings_default_page">启动默认页面</string>
     <string name="settings_row_default_open">启动默认打开</string>
-    <string name="settings_row_first_week">第一周起始日期</string>
+    <string name="settings_row_first_week">第一周周一日期</string>
+    <string name="settings_first_week_adjust_title">将日期调整到周一</string>
+    <string name="settings_first_week_adjust_message">你选择的 %1$s 是该周中的一天。课表周从周一开始，实际将保存为 %2$s。</string>
+    <string name="settings_first_week_adjust_save">保存周一日期</string>
+    <string name="settings_first_week_saved">第一周周一已设为 %1$s</string>
+    <string name="settings_first_week_save_failed">保存第一周日期失败，请重试</string>
     <string name="settings_row_reminder_time">提醒时间</string>
-    <string name="settings_semester_start">学期开始周（第一周起始日期）</string>
+    <string name="settings_semester_start">学期开始周（第一周周一）</string>
     <string name="settings_change">修改</string>
     <string name="settings_theme">主题色</string>
     <string name="settings_theme_warm">暖色</string>
