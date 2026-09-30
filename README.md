@@ -8,7 +8,7 @@ JLU_schedule 是一个面向吉大学生的课表工具，支持通过教务网�
 
 ## 安装包下载
 
-- Android: 从 [国内下载页](https://jfyuhong.top/updates/android/) 或 [GitHub Releases](https://github.com/JFyuhong/JLU_schedule/releases) 下载正式安装包
+- Android: 从 [GitHub Releases](https://github.com/JFyuhong/JLU_schedule/releases) 下载正式安装包。国内镜像目前受域名备案或接入备案阻断，暂不可稳定使用。
 - iOS / 鸿蒙：源码位于 `ios/` 与 `harmonyos/` 目录，需自行用 Xcode / DevEco Studio 构建签名（构建说明见 PORTING.md）
 - iOS 备注: 如果你能帮我搞定`99$/每年`的开发者计划的话，上架 TestFlight 也不是不行😂
 

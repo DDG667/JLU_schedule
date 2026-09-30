@@ -12,6 +12,6 @@ Android 正式版，`versionCode=6`，最低支持 Android 8.0（API 26）。
 
 首次从 v1.2 升级需要手动下载安装本版；以后可在应用的“设置 → 检查更新”中更新。Android 安装界面仍需用户确认。请保留原有应用，直接覆盖安装以保留本地数据。
 
-国内镜像：[jfyuhong.top/updates/android/](https://jfyuhong.top/updates/android/)。
+下载地址：[GitHub Release APK](https://github.com/JFyuhong/JLU_schedule/releases/download/v2.2.0/JLU_schedule.apk)。国内镜像目前受域名备案或接入备案阻断，暂不可稳定使用；完成备案并从外部网络验证后恢复。
 
 安装包由与 v1.2 相同的正式证书签名，证书 SHA-256：`7ed7c719a6abb18d1eb014a18c173532fd4f11fb4bd350f003245549135dd6dc`。
