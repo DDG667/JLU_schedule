@@ -433,7 +433,7 @@
                 <TextView
                     android:id="@+id/updateVersionText"
                     style="@style/SettingsRowValue"
-                    android:text="当前版本 v2.1.0" />
+                    android:text="@string/update_checking" />
                 <ImageView style="@style/SettingsRowChevron" android:contentDescription="@null" />
             </LinearLayout>
         </LinearLayout>
@@ -443,7 +443,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:text="JLU Schedule 2.1.0"
+            android:text="JLU Schedule"
             android:textColor="?android:attr/textColorSecondary"
             android:textSize="12sp"
             android:layout_marginTop="8dp" />

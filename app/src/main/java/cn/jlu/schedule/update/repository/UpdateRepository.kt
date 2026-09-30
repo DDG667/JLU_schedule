@@ -76,14 +76,8 @@ class UpdateRepository(
         val successes = outcomes.filter { it.result.isSuccess }
         if (successes.isEmpty()) {
             val allErrors = outcomes.mapNotNull { it.result.exceptionOrNull()?.message }
-            val allOlder = allErrors.isNotEmpty() && allErrors.all { it.contains("未高于当前版本") }
-            return if (allOlder) {
-                AppPreferences.setLastUpdateCheckTime(context, System.currentTimeMillis())
-                UpdateCheckResult.NoUpdate("当前已是最新版本")
-            } else {
-                val errorSummary = if (allErrors.isNotEmpty()) allErrors.distinct().joinToString("; ") else "网络连接异常"
-                UpdateCheckResult.Error("检查更新失败: $errorSummary")
-            }
+            val errorSummary = if (allErrors.isNotEmpty()) allErrors.distinct().joinToString("; ") else "网络连接异常"
+            return UpdateCheckResult.Error("所有更新源均不可用: $errorSummary")
         }
 
         // 网络失败不计入 24 小时间隔，避免断网后长期错过更新。
@@ -148,7 +142,7 @@ class UpdateRepository(
                     trustedKeys = trustedKeys,
                     currentVersionCode = currentVersionCode,
                     currentSdk = currentSdk,
-                    checkVersionNewer = true
+                    checkVersionNewer = false
                 )
                 FetchOutcome(url, verified, System.currentTimeMillis() - start)
             }

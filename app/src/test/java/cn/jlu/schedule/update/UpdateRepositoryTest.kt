@@ -198,6 +198,27 @@ class UpdateRepositoryTest {
         val url1 = server1.url("/updates/android/stable.json").toString()
         val result = repo.checkUpdate(testContext, force = true, endpoints = listOf(url1))
         assertTrue(result is UpdateCheckResult.NoUpdate)
+        assertEquals("当前已是最新版本", (result as UpdateCheckResult.NoUpdate).reason)
+    }
+
+    @Test
+    fun testSameVersionWithOtherMirrorUnavailableIsStillLatest() = runBlocking {
+        server1.enqueue(MockResponse().setResponseCode(503))
+        server2.enqueue(MockResponse().setBody(createSignedEnvelopeJson(versionCode = 6)))
+
+        val repo = UpdateRepository(
+            trustedKeys = mapOf(keyId to pubKeyB64),
+            appVersionCodeOverride = 6,
+            isDebugOverride = false
+        )
+
+        val urls = listOf(
+            server1.url("/updates/android/stable.json").toString(),
+            server2.url("/updates/android/stable.json").toString()
+        )
+        val result = repo.checkUpdate(testContext, force = true, endpoints = urls)
+        assertTrue(result is UpdateCheckResult.NoUpdate)
+        assertEquals("当前已是最新版本", (result as UpdateCheckResult.NoUpdate).reason)
     }
 
     @Test

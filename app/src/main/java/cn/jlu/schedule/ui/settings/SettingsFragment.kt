@@ -224,8 +224,9 @@ class SettingsFragment : Fragment() {
         val versionText = view.findViewById<TextView>(R.id.updateVersionText)
         val currentVersionName = runCatching {
             requireContext().packageManager.getPackageInfo(requireContext().packageName, 0).versionName
-        }.getOrNull() ?: "2.1.0"
+        }.getOrNull() ?: "未知版本"
         versionText.text = "v$currentVersionName"
+        view.findViewById<TextView>(R.id.settingsFooterVersion).text = "JLU Schedule $currentVersionName"
 
         checkUpdateRow.setOnClickListener {
             versionText.text = getString(R.string.update_checking)
