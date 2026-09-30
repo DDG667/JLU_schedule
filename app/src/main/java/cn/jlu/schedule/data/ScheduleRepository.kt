@@ -61,6 +61,24 @@ object ScheduleRepository {
         ImportedScheduleStorage.addManualCourseToActive(context.filesDir, input)
     }
 
+    suspend fun deleteCourse(
+        context: Context,
+        courseIndex: Int,
+        expected: CourseSchedule
+    ): Result<Boolean> = mutate(context) {
+        val deleted = ImportedScheduleStorage.deleteCourseFromActive(context.filesDir, courseIndex, expected)
+        if (deleted) {
+            expected.meetings.forEach { meeting ->
+                for (section in meeting.startSection..meeting.endSection) {
+                    if (AppPreferences.getPinnedCourse(context, meeting.weekday, section) == expected.courseName) {
+                        AppPreferences.setPinnedCourseForSlot(context, meeting.weekday, section..section, null)
+                    }
+                }
+            }
+        }
+        deleted
+    }
+
     suspend fun importParsedCourses(
         context: Context,
         courses: List<CourseSchedule>,

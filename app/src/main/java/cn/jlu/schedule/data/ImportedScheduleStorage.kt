@@ -315,6 +315,22 @@ object ImportedScheduleStorage {
         newProfiles.size
     }
 
+    /** 仅删除当前课表中选中的课程；用快照比对避免页面过期后误删其他课程。 */
+    fun deleteCourseFromActive(filesDir: File, courseIndex: Int, expected: CourseSchedule): Boolean = synchronized(lock) {
+        val meta = ensureInitialized(filesDir)
+        val active = meta.profiles.firstOrNull { it.id == meta.activeId } ?: meta.profiles.first()
+        val courses = readCoursesFile(filesDir, active.coursesFile)
+        if (courses.getOrNull(courseIndex) != expected) return@synchronized false
+
+        writeCoursesFile(filesDir, active.coursesFile, courses.filterIndexed { index, _ -> index != courseIndex })
+        val now = System.currentTimeMillis()
+        saveMeta(filesDir, meta.copy(
+            activeId = active.id,
+            profiles = meta.profiles.map { if (it.id == active.id) it.copy(updatedAt = now) else it }
+        ))
+        true
+    }
+
     fun exportActiveTimetableText(filesDir: File, periodRanges: List<String>): String = synchronized(lock) {
         val meta = ensureInitialized(filesDir)
         val active = meta.profiles.firstOrNull { it.id == meta.activeId } ?: meta.profiles.first()

@@ -184,6 +184,20 @@ class TimetableFragment : Fragment() {
                             periodRanges = SectionTimes.DEFAULT_RANGES,
                             onCoverPinned = {
                                 currentUiData?.let { renderTimetable(it) }
+                            },
+                            onDeleteCourse = { selected ->
+                                viewLifecycleOwner.lifecycleScope.launch {
+                                    val result = ScheduleRepository.deleteCourse(
+                                        requireContext(), selected.courseIndex, selected.course
+                                    )
+                                    if (!isAdded) return@launch
+                                    val message = when {
+                                        result.getOrNull() == true -> getString(R.string.course_detail_deleted)
+                                        result.getOrNull() == false -> getString(R.string.course_detail_delete_failed)
+                                        else -> result.exceptionOrNull()?.message ?: getString(R.string.course_detail_delete_failed)
+                                    }
+                                    UiFeedback.showMessage(view, message, ThemePaletteProvider.fromContext(requireContext()))
+                                }
                             }
                         )
                     }

@@ -92,6 +92,11 @@
     <string name="manual_parity_odd">仅单周</string>
     <string name="manual_parity_even">仅双周</string>
     <string name="action_cancel">取消</string>
+    <string name="course_detail_delete">从当前课表删除课程</string>
+    <string name="course_detail_delete_title">删除课程</string>
+    <string name="course_detail_delete_message">确定从当前课表删除「%1$s」吗？这会删除该课程的全部上课时间；重新覆盖导入课表时可能再次出现。</string>
+    <string name="course_detail_deleted">已从当前课表删除课程</string>
+    <string name="course_detail_delete_failed">课程已变化，请重新打开详情后再试</string>
     <string name="action_save">保存</string>
     <string name="timetable_add_course">手动添加课程</string>
     <string name="timetable_import">导入课表</string>
@@ -236,8 +241,8 @@
     <string name="academic_edit_plan_button">手动编辑学业指标</string>
     <string name="academic_add_category_button">＋ 添加自定义模块</string>
     <string name="academic_dialog_auto_sum">按模块自动求和</string>
-    <string name="academic_open_web">查看培养方案原网页</string>
-    <string name="academic_source_web">来源：教务系统培养方案直同步</string>
+    <string name="academic_open_web">查看学业完成查询原网页</string>
+    <string name="academic_source_web">来源：教务系统学业完成查询同步</string>
     <string name="academic_source_manual">来源：手动自定义编辑</string>
     <string name="academic_source_estimated">来源：本地成绩启发式估算（以教务原系统为准）</string>
     <string name="academic_category_compulsory">学科基础与专业必修</string>
@@ -252,7 +257,7 @@
     <string name="tools_web_portal_hint">访问吉大本科生教务大厅</string>
     <string name="tools_web_grade">成绩查询原网页</string>
     <string name="tools_web_exam">我的考试安排原网页</string>
-    <string name="tools_web_academic">培养方案与学业完成原网页</string>
+    <string name="tools_web_academic">学业完成查询原网页</string>
     <!-- 通用操作 -->
     <string name="action_close">关闭</string>
     <string name="close">关闭</string>

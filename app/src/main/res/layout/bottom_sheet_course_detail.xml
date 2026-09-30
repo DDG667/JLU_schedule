@@ -214,5 +214,18 @@
             android:gravity="center"
             android:text="@string/course_detail_copy_hint"
             android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/detailDeleteCourseBtn"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:text="@string/course_detail_delete"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:foreground="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true" />
     </LinearLayout>
 </FrameLayout>

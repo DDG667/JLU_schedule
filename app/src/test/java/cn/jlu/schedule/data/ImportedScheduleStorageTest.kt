@@ -95,6 +95,32 @@ class ImportedScheduleStorageTest {
     }
 
     @Test
+    fun deleteCourse_removesOnlySelectedManualCourseAndRejectsStaleSnapshot() {
+        ImportedScheduleStorage.addManualCourseToActive(filesDir, manualCourse("同名课程"))
+        ImportedScheduleStorage.addManualCourseToActive(filesDir, manualCourse("同名课程").copy(teacher = "另一位老师"))
+        val courses = ImportedScheduleStorage.loadActiveCourses(filesDir)
+
+        assertFalse(ImportedScheduleStorage.deleteCourseFromActive(filesDir, 1, courses[0]))
+        assertEquals(2, ImportedScheduleStorage.loadActiveCourses(filesDir).size)
+        assertTrue(ImportedScheduleStorage.deleteCourseFromActive(filesDir, 1, courses[1]))
+        assertEquals(courses[0], ImportedScheduleStorage.loadActiveCourses(filesDir).single())
+    }
+
+    @Test
+    fun deleteCourse_alsoRemovesImportedCourseFromActiveProfile() {
+        ImportedScheduleStorage.importParsedCourses(
+            filesDir,
+            listOf(parsedCourse("自动导入课程")),
+            ImportedScheduleStorage.ImportMode.OVERWRITE_ACTIVE
+        )
+        ImportedScheduleStorage.addManualCourseToActive(filesDir, manualCourse("手动课程"))
+        val imported = ImportedScheduleStorage.loadActiveCourses(filesDir).first()
+
+        assertTrue(ImportedScheduleStorage.deleteCourseFromActive(filesDir, 0, imported))
+        assertEquals("手动课程", ImportedScheduleStorage.loadActiveCourses(filesDir).single().courseName)
+    }
+
+    @Test
     fun addManualCourse_rejectsInvalidInput() {
         ImportedScheduleStorage.listProfiles(filesDir)
 

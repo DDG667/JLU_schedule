@@ -16,6 +16,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.core.graphics.ColorUtils
 import cn.jlu.schedule.R
 import cn.jlu.schedule.domain.CourseMeetingRef
@@ -47,7 +48,8 @@ object CourseDetailBottomSheet {
         primary: CourseMeetingRef,
         allCourses: List<CourseMeetingRef>,
         periodRanges: List<String>,
-        onCoverPinned: (() -> Unit)? = null
+        onCoverPinned: (() -> Unit)? = null,
+        onDeleteCourse: ((CourseMeetingRef) -> Unit)? = null
     ) {
         val dialog = BottomSheetDialog(context)
         val parent = FrameLayout(context)
@@ -84,8 +86,30 @@ object CourseDetailBottomSheet {
         bindRowIcon(view, R.id.detailIconWeeks, palette)
         bindRowIcon(view, R.id.detailIconSemester, palette)
 
-        val uniqueCourses = allCourses.distinctBy { it.course.courseName }
+        val uniqueCourses = allCourses.distinctBy { it.courseIndex }
         var currentItem = primary
+
+        val deleteButton = view.findViewById<TextView>(R.id.detailDeleteCourseBtn)
+        deleteButton.visibility = if (onDeleteCourse == null) View.GONE else View.VISIBLE
+        deleteButton.setTextColor(if (palette.isDark) 0xFFFF9B91.toInt() else 0xFFB3261E.toInt())
+        deleteButton.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 14f
+            setColor(palette.panelBackground)
+            setStroke(1, ColorUtils.blendARGB(palette.panelBackground, 0xFFB3261E.toInt(), 0.35f))
+        }
+        deleteButton.setOnClickListener {
+            val selected = currentItem
+            AlertDialog.Builder(context)
+                .setTitle(R.string.course_detail_delete_title)
+                .setMessage(context.getString(R.string.course_detail_delete_message, selected.course.courseName))
+                .setNegativeButton(R.string.action_cancel, null)
+                .setPositiveButton(R.string.manage_delete) { _, _ ->
+                    dialog.dismiss()
+                    onDeleteCourse?.invoke(selected)
+                }
+                .show()
+        }
 
         // 冲突处理区
         val conflictContainer = view.findViewById<LinearLayout>(R.id.detailConflictContainer)
@@ -201,7 +225,7 @@ object CourseDetailBottomSheet {
             val dp6 = (6 * context.resources.displayMetrics.density + 0.5f).toInt()
 
             uniqueCourses.forEach { courseItem ->
-                val isSelected = courseItem.course.courseName == currentItem.course.courseName
+                val isSelected = courseItem.courseIndex == currentItem.courseIndex
                 val tab = TextView(context).apply {
                     text = "${courseItem.course.courseName} (第${courseItem.meeting.startSection}-${courseItem.meeting.endSection}节)"
                     textSize = 12f
@@ -216,7 +240,7 @@ object CourseDetailBottomSheet {
                         // 重新刷新 Tab 选中样式
                         for (i in 0 until conflictTabs.childCount) {
                             val child = conflictTabs.getChildAt(i) as? TextView ?: continue
-                            val active = uniqueCourses.getOrNull(i)?.course?.courseName == courseItem.course.courseName
+                            val active = uniqueCourses.getOrNull(i)?.courseIndex == courseItem.courseIndex
                             child.setTypeface(null, if (active) Typeface.BOLD else Typeface.NORMAL)
                             child.background = GradientDrawable().apply {
                                 shape = GradientDrawable.RECTANGLE
