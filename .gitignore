@@ -55,4 +55,7 @@ scripts/keys/
 !app/src/main/res/raw/*.pem
 release_keys/
 
+# Local promotional material and exports
+/media/promo/
+
 
