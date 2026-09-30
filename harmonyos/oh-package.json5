@@ -4,6 +4,6 @@
   "description": "吉林大学课表应用 · 鸿蒙版",
   "main": "",
   "author": "",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "dependencies": {}
 }

@@ -179,6 +179,14 @@ Windows PowerShell：
 ./gradlew assembleDebug
 ```
 
+## 许可证
+
+本项目采用 GNU General Public License v3.0（SPDX：`GPL-3.0-only`），许可证全文见 [LICENSE](LICENSE)。
+
+Copyright (c) 2026 ZiTao Wang
+
+项目使用的第三方组件保留各自的许可证与版权声明。
+
 ## 免责声明
 
 本项目仅用于学习与个人效率提升，请遵守学校相关系统使用规范与法律法规。

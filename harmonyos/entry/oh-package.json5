@@ -4,6 +4,6 @@
   "description": "JLU Schedule entry module",
   "main": "",
   "author": "",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "dependencies": {}
 }
