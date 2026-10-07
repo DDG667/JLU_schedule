@@ -290,6 +290,7 @@ class SettingsFragment : Fragment() {
             when (AppPreferences.getThemeColor(requireContext())) {
                 AppPreferences.THEME_OCEAN -> R.id.themeOcean
                 AppPreferences.THEME_MINT -> R.id.themeMint
+                AppPreferences.THEME_TOKYO -> R.id.themeTokyo
                 else -> R.id.themeWarm
             }
         ) { id ->
@@ -298,9 +299,12 @@ class SettingsFragment : Fragment() {
                 when (id) {
                     R.id.themeOcean -> AppPreferences.THEME_OCEAN
                     R.id.themeMint -> AppPreferences.THEME_MINT
+                    R.id.themeTokyo -> AppPreferences.THEME_TOKYO
                     else -> AppPreferences.THEME_WARM
                 }
             )
+            // 桌面小组件跟随主题色，切换后立即刷新
+            cn.jlu.schedule.widget.TodayWidgetProvider.updateAll(requireContext())
             // 主题色参与 Activity 主题属性，需重建生效
             activity?.recreate()
         }
@@ -323,6 +327,8 @@ class SettingsFragment : Fragment() {
                 }
             )
             ThemePaletteProvider.applyNightMode(requireContext())
+            // 桌面小组件深浅变体跟随该设置，切换后立即刷新
+            cn.jlu.schedule.widget.TodayWidgetProvider.updateAll(requireContext())
         }
 
         bindSegment(

@@ -9,10 +9,12 @@ import android.content.Intent
 import android.widget.RemoteViews
 import cn.jlu.schedule.MainActivity
 import cn.jlu.schedule.R
+import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.data.ImportedScheduleStorage
 import cn.jlu.schedule.domain.SectionTimes
 import cn.jlu.schedule.domain.WeekScheduleCalculator
 import cn.jlu.schedule.model.Weekday
+import cn.jlu.schedule.ui.theme.ThemePaletteProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,17 +52,25 @@ class TodayWidgetProvider : AppWidgetProvider() {
 
         private fun buildRemoteViews(context: Context, data: Snapshot): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_today)
+            // 小组件跟随应用主题与深浅设置着色
+            val palette = ThemePaletteProvider.fromContext(context, widgetNightOverride(context))
+            views.setInt(R.id.widgetRoot, "setBackgroundResource", widgetBackgroundRes(context))
             views.setTextViewText(R.id.widgetTitle, context.getString(R.string.widget_today_title))
             views.setTextViewText(R.id.widgetSubtitle, data.subtitle)
+            views.setTextColor(R.id.widgetTitle, palette.textPrimary)
+            views.setTextColor(R.id.widgetSubtitle, palette.textSecondary)
             views.removeAllViews(R.id.widgetCourseList)
             if (data.items.isEmpty()) {
                 views.setViewVisibility(R.id.widgetEmpty, android.view.View.VISIBLE)
+                views.setTextColor(R.id.widgetEmpty, palette.textSecondary)
             } else {
                 views.setViewVisibility(R.id.widgetEmpty, android.view.View.GONE)
                 data.items.forEach { item ->
                     val row = RemoteViews(context.packageName, R.layout.widget_course_item)
                     row.setTextViewText(R.id.widgetItemName, item.name)
                     row.setTextViewText(R.id.widgetItemDetail, item.detail)
+                    row.setTextColor(R.id.widgetItemName, palette.textPrimary)
+                    row.setTextColor(R.id.widgetItemDetail, palette.textSecondary)
                     views.addView(R.id.widgetCourseList, row)
                 }
             }
@@ -72,6 +82,24 @@ class TodayWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widgetRoot, openIntent)
             return views
+        }
+
+        /** 应用内选择浅色/深色时强制对应色板变体；跟随系统时返回 null，交由系统配置决定 */
+        private fun widgetNightOverride(context: Context): Boolean? {
+            return when (AppPreferences.getDarkMode(context)) {
+                AppPreferences.DARK_LIGHT -> false
+                AppPreferences.DARK_DARK -> true
+                else -> null
+            }
+        }
+
+        private fun widgetBackgroundRes(context: Context): Int {
+            return when (AppPreferences.getThemeColor(context)) {
+                AppPreferences.THEME_OCEAN -> R.drawable.widget_background_ocean
+                AppPreferences.THEME_MINT -> R.drawable.widget_background_mint
+                AppPreferences.THEME_TOKYO -> R.drawable.widget_background_tokyo
+                else -> R.drawable.widget_background_warm
+            }
         }
 
         private fun readSnapshot(context: Context): Snapshot {

@@ -35,6 +35,17 @@
         <item name="android:windowBackground">@color/mint_page_background</item>
     </style>
 
+    <style name="Theme.JLU.Tokyo">
+        <item name="android:textColorPrimary">@color/tokyo_text_primary</item>
+        <item name="android:textColorSecondary">@color/tokyo_text_secondary</item>
+        <item name="android:textColorHint">@color/tokyo_text_secondary</item>
+        <item name="colorPrimary">@color/tokyo_icon_tint</item>
+        <item name="colorAccent">@color/tokyo_icon_tint</item>
+        <item name="colorControlNormal">@color/tokyo_icon_tint</item>
+        <item name="colorControlActivated">@color/tokyo_icon_tint</item>
+        <item name="android:windowBackground">@color/tokyo_page_background</item>
+    </style>
+
     <!-- 设置页卡片分组样式（颜色在代码中按主题色板动态着色） -->
     <style name="SettingsCard">
         <item name="android:layout_width">match_parent</item>

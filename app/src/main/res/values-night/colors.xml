@@ -60,6 +60,26 @@
     <color name="mint_detail_body">#B9D6C9</color>
     <color name="mint_detail_meta">#87A898</color>
 
+    <!-- 东京夜（深色，Tokyo Night，色阶对齐 ColorBlendr Tokyo Night） -->
+    <color name="tokyo_page_background">#0E0E17</color>
+    <color name="tokyo_nav_background">#F016161E</color>
+    <color name="tokyo_panel_background">#1A1B26</color>
+    <color name="tokyo_panel_alt_background">#12121B</color>
+    <color name="tokyo_text_primary">#D6DDF8</color>
+    <color name="tokyo_text_secondary">#A9B1D6</color>
+    <color name="tokyo_icon_tint">#7AA2F7</color>
+    <color name="tokyo_button_background">#283457</color>
+    <color name="tokyo_button_text">#C0CAF5</color>
+    <color name="tokyo_grid_header">#1A1B26</color>
+    <color name="tokyo_grid_header_today">#2A2C3D</color>
+    <color name="tokyo_grid_left_column">#12121B</color>
+    <color name="tokyo_grid_day_cell">#0E0E17</color>
+    <color name="tokyo_grid_day_today">#1A1B26</color>
+    <color name="tokyo_detail_card">#1A1B26</color>
+    <color name="tokyo_detail_title">#D6DDF8</color>
+    <color name="tokyo_detail_body">#A9B1D6</color>
+    <color name="tokyo_detail_meta">#565F89</color>
+
     <!-- 弹窗与通用输入框/面板组件色（深色） -->
     <color name="dialog_input_background">#261E16</color>
     <color name="dialog_input_stroke">#443525</color>

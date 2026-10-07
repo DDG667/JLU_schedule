@@ -98,6 +98,13 @@ class TimetableFragment : Fragment() {
         val palette = ThemePaletteProvider.fromContext(requireContext())
         addCourseButton.imageTintList = ColorStateList.valueOf(palette.iconTint)
         importScheduleButton.imageTintList = ColorStateList.valueOf(palette.iconTint)
+        // 操作按钮圆底跟随主题色板（替代固定 33% 白底），使深色主题下不再出现灰白薄雾
+        listOf(addCourseButton, importScheduleButton).forEach { button ->
+            button.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(palette.buttonBackground)
+            }
+        }
 
         observeTimetable()
 

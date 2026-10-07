@@ -217,6 +217,10 @@
                     android:id="@+id/themeMint"
                     style="@style/SettingsSegmentButton"
                     android:text="@string/settings_theme_mint" />
+                <TextView
+                    android:id="@+id/themeTokyo"
+                    style="@style/SettingsSegmentButton"
+                    android:text="@string/settings_theme_tokyo" />
             </LinearLayout>
 
             <LinearLayout style="@style/SettingsFieldLabel">
