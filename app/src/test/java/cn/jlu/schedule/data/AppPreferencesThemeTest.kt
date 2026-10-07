@@ -24,8 +24,8 @@ class AppPreferencesThemeTest {
     }
 
     @Test
-    fun themeColor_defaultsToWarm() {
-        assertEquals(AppPreferences.THEME_WARM, AppPreferences.getThemeColor(context))
+    fun themeColor_defaultsToTokyoNight() {
+        assertEquals(AppPreferences.THEME_TOKYO, AppPreferences.getThemeColor(context))
     }
 
     @Test
@@ -44,12 +44,29 @@ class AppPreferencesThemeTest {
     @Test
     fun themeColor_setterSanitizesUnknownValue() {
         AppPreferences.setThemeColor(context, "neon")
-        assertEquals(AppPreferences.THEME_WARM, AppPreferences.getThemeColor(context))
+        assertEquals(AppPreferences.THEME_TOKYO, AppPreferences.getThemeColor(context))
     }
 
     @Test
-    fun themeColor_storedUnknownValueFallsBackToWarm() {
+    fun themeColor_storedUnknownValueFallsBackToTokyoNight() {
         prefs.edit().putString("theme_color", "neon").apply()
-        assertEquals(AppPreferences.THEME_WARM, AppPreferences.getThemeColor(context))
+        assertEquals(AppPreferences.THEME_TOKYO, AppPreferences.getThemeColor(context))
+    }
+
+    @Test
+    fun darkMode_defaultsToDark() {
+        assertEquals(AppPreferences.DARK_DARK, AppPreferences.getDarkMode(context))
+    }
+
+    @Test
+    fun darkMode_explicitSystemChoiceIsPreserved() {
+        AppPreferences.setDarkMode(context, AppPreferences.DARK_SYSTEM)
+        assertEquals(AppPreferences.DARK_SYSTEM, AppPreferences.getDarkMode(context))
+    }
+
+    @Test
+    fun darkMode_storedUnknownValueFallsBackToDark() {
+        prefs.edit().putString("dark_mode", "neon").apply()
+        assertEquals(AppPreferences.DARK_DARK, AppPreferences.getDarkMode(context))
     }
 }

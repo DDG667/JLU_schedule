@@ -27,19 +27,20 @@ object AppPreferences {
     const val DARK_LIGHT = "light"
     const val DARK_DARK = "dark"
 
+    /** 深浅模式默认深色：与默认主题「东京夜」搭配，呈现原版 Tokyo Night 观感 */
     fun getDarkMode(context: Context): String {
         val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(KEY_DARK_MODE, DARK_SYSTEM)
+            .getString(KEY_DARK_MODE, DARK_DARK)
         return when (raw) {
-            DARK_LIGHT, DARK_DARK -> raw ?: DARK_SYSTEM
-            else -> DARK_SYSTEM
+            DARK_LIGHT, DARK_DARK, DARK_SYSTEM -> raw ?: DARK_DARK
+            else -> DARK_DARK
         }
     }
 
     fun setDarkMode(context: Context, mode: String) {
         val safe = when (mode) {
-            DARK_LIGHT, DARK_DARK -> mode
-            else -> DARK_SYSTEM
+            DARK_LIGHT, DARK_DARK, DARK_SYSTEM -> mode
+            else -> DARK_DARK
         }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
@@ -75,19 +76,20 @@ object AppPreferences {
             .apply()
     }
 
+    /** 主题色默认「东京夜」；历史脏数据同样回退到默认主题 */
     fun getThemeColor(context: Context): String {
         val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(KEY_THEME_COLOR, THEME_WARM)
+            .getString(KEY_THEME_COLOR, THEME_TOKYO)
         return when (raw) {
-            THEME_OCEAN, THEME_MINT, THEME_TOKYO -> raw
-            else -> THEME_WARM
+            THEME_WARM, THEME_OCEAN, THEME_MINT, THEME_TOKYO -> raw
+            else -> THEME_TOKYO
         }
     }
 
     fun setThemeColor(context: Context, theme: String) {
         val safe = when (theme) {
-            THEME_OCEAN, THEME_MINT, THEME_TOKYO -> theme
-            else -> THEME_WARM
+            THEME_WARM, THEME_OCEAN, THEME_MINT, THEME_TOKYO -> theme
+            else -> THEME_TOKYO
         }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
