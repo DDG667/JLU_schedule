@@ -22,6 +22,7 @@ import cn.jlu.schedule.domain.SectionTimes
 import cn.jlu.schedule.domain.WeekScheduleCalculator
 import cn.jlu.schedule.model.Weekday
 import cn.jlu.schedule.ui.theme.ThemePaletteProvider
+import cn.jlu.schedule.ui.theme.SurfaceStyle
 import cn.jlu.schedule.ui.timetable.CourseCardColors
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -78,13 +79,12 @@ class TodayScheduleFragment : Fragment() {
         )
         val hasCustomBackground = !AppPreferences.getCustomBackgroundUri(requireContext()).isNullOrBlank()
         root.setBackgroundColor(
-            if (hasCustomBackground) withAlpha(palette.pageBackground, 0.27f) else palette.pageBackground
+            if (hasCustomBackground) Color.TRANSPARENT else palette.pageBackground
         )
-        view.findViewById<LinearLayout>(R.id.todaySummaryCard).background =
-            roundedBackground(withAlpha(palette.panelAltBackground, 0.62f))
-        countChip.background = roundedBackground(withAlpha(palette.panelBackground, 0.5f))
-        firstClass.background = roundedBackground(withAlpha(palette.panelBackground, 0.5f))
-        lastClass.background = roundedBackground(withAlpha(palette.panelBackground, 0.5f))
+        SurfaceStyle.apply(view.findViewById(R.id.todaySummaryCard), palette, SurfaceStyle.Variant.Panel, 16f)
+        countChip.background = SurfaceStyle.drawable(requireContext(), palette, SurfaceStyle.Variant.Control, 12f)
+        firstClass.background = SurfaceStyle.drawable(requireContext(), palette, SurfaceStyle.Variant.Panel, 12f)
+        lastClass.background = SurfaceStyle.drawable(requireContext(), palette, SurfaceStyle.Variant.Panel, 12f)
         title.setTextColor(themeColors.text)
         subTitle.setTextColor(themeColors.subText)
         countChip.setTextColor(themeColors.text)
@@ -160,6 +160,10 @@ class TodayScheduleFragment : Fragment() {
                 layoutParams = LinearLayout.LayoutParams(dp(56), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                     topMargin = dp(4)
                 }
+                if (hasCustomBackground) {
+                    background = roundedBackground(palette.panelAltBackground)
+                    setPadding(0, dp(6), 0, dp(6))
+                }
                 addView(TextView(ctx).apply {
                     text = periodTimeRanges[start - 1].substringBefore('-')
                     textSize = 13f
@@ -170,7 +174,7 @@ class TodayScheduleFragment : Fragment() {
                     text = periodTimeRanges[end - 1].substringAfter('-')
                     textSize = 10f
                     setTextColor(themeColors.subText)
-                    alpha = 0.8f
+                    alpha = if (hasCustomBackground) 1f else 0.8f
                 })
             }
 
@@ -234,7 +238,7 @@ class TodayScheduleFragment : Fragment() {
                     text = item.meeting.location.ifBlank { "教室待定" }
                     textSize = 13f
                     setTextColor(themeColors.subText)
-                    alpha = 0.9f
+                    alpha = if (hasCustomBackground) 1f else 0.9f
                     layoutParams = LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT
@@ -252,6 +256,7 @@ class TodayScheduleFragment : Fragment() {
                     cornerRadius = dp(16).toFloat()
                     setColor(if (isActive) themeColors.emptyCard else themeColors.card)
                 }
+                SurfaceStyle.addDepth(this, palette, if (isActive) 3f else 2f)
                 addView(accent)
                 addView(content)
                 layoutParams = LinearLayout.LayoutParams(
@@ -264,6 +269,7 @@ class TodayScheduleFragment : Fragment() {
 
             val row = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
+                clipChildren = false
                 addView(timeColumn)
                 addView(card)
             }

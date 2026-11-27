@@ -9,29 +9,38 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:clipToPadding="false"
         android:orientation="vertical"
         android:paddingStart="16dp"
         android:paddingTop="18dp"
         android:paddingEnd="16dp"
         android:paddingBottom="24dp">
 
-        <TextView
+        <LinearLayout
+            android:id="@+id/settingsHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/settings_title"
-            android:textColor="?android:attr/textColorPrimary"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.02" />
+            android:layout_marginBottom="16dp"
+            android:orientation="vertical"
+            android:padding="8dp">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:layout_marginBottom="20dp"
-            android:text="@string/settings_intro"
-            android:textColor="?android:attr/textColorSecondary"
-            android:textSize="13sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_title"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.02" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/settings_intro"
+                android:textColor="?android:attr/textColorSecondary"
+                android:textSize="13sp" />
+        </LinearLayout>
 
         <!-- 课表管理 -->
         <LinearLayout
@@ -119,7 +128,7 @@
                 android:layout_marginTop="2dp"
                 android:layout_marginBottom="6dp"
                 android:orientation="vertical"
-                android:padding="12dp">
+                android:padding="8dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"

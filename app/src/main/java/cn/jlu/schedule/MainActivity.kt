@@ -5,14 +5,17 @@ import android.graphics.BitmapFactory
 import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Bundle
-import android.provider.MediaStore
+import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import cn.jlu.schedule.update.model.UpdateCheckResult
 import cn.jlu.schedule.update.repository.UpdateRepository
 import cn.jlu.schedule.update.ui.UpdateDialogHelper
@@ -28,7 +31,9 @@ import cn.jlu.schedule.ui.tools.ToolsFragment
 class MainActivity : AppCompatActivity() {
     private lateinit var rootContainer: FrameLayout
     private lateinit var backgroundImage: ImageView
+    private lateinit var backgroundScrim: View
     private lateinit var bottomNav: BottomNavigationView
+    private var backgroundLoadToken = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         ThemePaletteProvider.applyNightMode(this)
@@ -38,6 +43,7 @@ class MainActivity : AppCompatActivity() {
 
         rootContainer = findViewById(R.id.rootContainer)
         backgroundImage = findViewById(R.id.backgroundImage)
+        backgroundScrim = findViewById(R.id.backgroundScrim)
         bottomNav = findViewById(R.id.bottomNav)
         applyUserAppearance()
         refreshCustomBackground()
@@ -109,43 +115,72 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun refreshCustomBackground() {
-        val uri = AppPreferences.getCustomBackgroundUri(this)?.let { runCatching { Uri.parse(it) }.getOrNull() }
+        val loadToken = ++backgroundLoadToken
+        val uri = AppPreferences.getCustomBackgroundUri(this)?.let { runCatching { it.toUri() }.getOrNull() }
         if (uri == null) {
-            backgroundImage.setImageDrawable(null)
-            backgroundImage.visibility = ImageView.GONE
+            clearCustomBackground()
             return
         }
 
-        val bitmap = runCatching {
+        lifecycleScope.launch {
+            val targetW = resources.displayMetrics.widthPixels.coerceAtLeast(1)
+            val targetH = resources.displayMetrics.heightPixels.coerceAtLeast(1)
+            val bitmap = withContext(Dispatchers.IO) { decodeCustomBackground(uri, targetW, targetH) }
+            if (isFinishing || isDestroyed || loadToken != backgroundLoadToken) return@launch
+            if (bitmap == null) {
+                clearCustomBackground()
+                return@launch
+            }
+            backgroundImage.setImageBitmap(bitmap)
+            backgroundImage.visibility = ImageView.VISIBLE
+            backgroundScrim.visibility = View.VISIBLE
+            applyUserAppearance()
+        }
+    }
+
+    private fun decodeCustomBackground(uri: Uri, targetW: Int, targetH: Int): android.graphics.Bitmap? {
+        return runCatching {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
                 val source = ImageDecoder.createSource(contentResolver, uri)
                 ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-                    val targetW = resources.displayMetrics.widthPixels.coerceAtLeast(1)
-                    val targetH = resources.displayMetrics.heightPixels.coerceAtLeast(1)
                     val srcW = info.size.width.coerceAtLeast(1)
                     val srcH = info.size.height.coerceAtLeast(1)
                     val sample = maxOf(srcW / targetW, srcH / targetH).coerceAtLeast(1)
                     decoder.setTargetSampleSize(sample)
+                    decoder.isMutableRequired = false
                 }
             } else {
                 @Suppress("DEPRECATION")
                 contentResolver.openInputStream(uri)?.use { stream ->
-                    val options = BitmapFactory.Options().apply {
-                        inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeStream(stream, null, bounds)
+                    val sample = calculateSample(bounds.outWidth, bounds.outHeight, targetW, targetH)
+                    contentResolver.openInputStream(uri)?.use { secondStream ->
+                        val options = BitmapFactory.Options().apply {
+                            inSampleSize = sample
+                            inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+                        }
+                        BitmapFactory.decodeStream(secondStream, null, options)
                     }
-                    BitmapFactory.decodeStream(stream, null, options)
                 }
             }
         }.getOrNull()
 
-        if (bitmap == null) {
-            backgroundImage.setImageDrawable(null)
-            backgroundImage.visibility = ImageView.GONE
-            return
-        }
+    }
 
-        backgroundImage.setImageBitmap(bitmap)
-        backgroundImage.visibility = ImageView.VISIBLE
+    private fun calculateSample(srcW: Int, srcH: Int, targetW: Int, targetH: Int): Int {
+        if (srcW <= 0 || srcH <= 0) return 1
+        var sample = 1
+        while (srcW / (sample * 2) >= targetW && srcH / (sample * 2) >= targetH) sample *= 2
+        return sample.coerceAtLeast(1)
+    }
+
+    private fun clearCustomBackground() {
+        backgroundLoadToken++
+        backgroundImage.setImageDrawable(null)
+        backgroundImage.visibility = ImageView.GONE
+        backgroundScrim.visibility = View.GONE
+        applyUserAppearance()
     }
 
     fun applyUserAppearance() {
@@ -156,6 +191,14 @@ class MainActivity : AppCompatActivity() {
         }
         rootContainer.setBackgroundColor(palette.pageBackground)
         bottomNav.setBackgroundColor(palette.navBackground)
+        bottomNav.elevation = 0f
+        bottomNav.isItemActiveIndicatorEnabled = false
+        findViewById<View>(R.id.navDivider).setBackgroundColor(
+            androidx.core.graphics.ColorUtils.blendARGB(palette.navBackground, palette.textPrimary, 0.08f)
+        )
+        backgroundScrim.setBackgroundColor(
+            androidx.core.graphics.ColorUtils.setAlphaComponent(palette.pageBackground, 72)
+        )
         val itemColors = ColorStateList(
             arrayOf(
                 intArrayOf(android.R.attr.state_checked),
