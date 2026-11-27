@@ -25,14 +25,33 @@ android {
     if (localSigningFile.isFile) {
         localSigningFile.inputStream().use(localSigningProperties::load)
     }
+    val envStorePath = System.getenv("SIGNING_STORE_FILE")?.takeIf { it.isNotBlank() }
+    val envStorePassword = System.getenv("SIGNING_STORE_PASSWORD")?.takeIf { it.isNotBlank() }
+    val envKeyAlias = System.getenv("SIGNING_KEY_ALIAS")?.takeIf { it.isNotBlank() }
+    val envKeyPassword = System.getenv("SIGNING_KEY_PASSWORD")?.takeIf { it.isNotBlank() }
+    val hasEnvSigning = envStorePath != null && envStorePassword != null && envKeyAlias != null && envKeyPassword != null
+
     val hasLocalSigning = localSigningProperties.getProperty("storePassword")?.isNotBlank() == true &&
         localSigningProperties.getProperty("keyPassword")?.isNotBlank() == true
+
     signingConfigs {
-        if (hasLocalSigning) {
-            create("official") {
-                storeFile = rootProject.file("../apk-key/key.jks")
+        if (hasEnvSigning) {
+            create("release") {
+                storeFile = file(envStorePath!!)
+                storePassword = envStorePassword
+                keyAlias = envKeyAlias
+                keyPassword = envKeyPassword
+            }
+        } else if (hasLocalSigning) {
+            create("release") {
+                val localStorePath = localSigningProperties.getProperty("storeFile")
+                storeFile = if (localStorePath.isNullOrBlank()) {
+                    rootProject.file("../apk-key/key.jks")
+                } else {
+                    file(localStorePath)
+                }
                 storePassword = localSigningProperties.getProperty("storePassword")
-                keyAlias = "JFyuhong"
+                keyAlias = localSigningProperties.getProperty("keyAlias")?.takeIf { it.isNotBlank() } ?: "ddg667-release"
                 keyPassword = localSigningProperties.getProperty("keyPassword")
             }
         }
@@ -40,7 +59,9 @@ android {
 
     buildTypes {
         release {
-            if (hasLocalSigning) signingConfig = signingConfigs.getByName("official")
+            if (hasEnvSigning || hasLocalSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
