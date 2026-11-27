@@ -56,7 +56,8 @@ class ApkDownloader(
                 }
             }
 
-            val partFile = File(updatesDir, "${payload.apk.sha256}.part")
+            val partKey = payload.apk.sha256.ifBlank { "v${payload.versionCode}_${payload.apk.size}" }
+            val partFile = File(updatesDir, "$partKey.part")
 
             // 2. 构建镜像尝试顺序（优先选用清单响应更快的源）
             val preferredHost = preferredMirror?.toHttpUrlOrNull()?.host

@@ -244,7 +244,7 @@ class SettingsFragment : Fragment() {
             checkUpdateRow.isEnabled = false
             viewLifecycleOwner.lifecycleScope.launch {
                 val repo = cn.jlu.schedule.update.repository.UpdateRepository()
-                val result = repo.checkUpdate(requireContext(), force = true)
+                val result = repo.checkUpdate(requireContext(), force = true, allowInDebug = true)
                 if (!isAdded) return@launch
                 versionText.text = "v$currentVersionName"
                 checkUpdateRow.isEnabled = true

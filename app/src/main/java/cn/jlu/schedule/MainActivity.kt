@@ -53,7 +53,7 @@ class MainActivity : AppCompatActivity() {
             delay(1500)
             if (isFinishing || isDestroyed) return@launch
             val updateRepo = UpdateRepository()
-            val result = updateRepo.checkAutoUpdate(this@MainActivity)
+            val result = updateRepo.checkAutoUpdate(this@MainActivity, allowInDebug = true)
             if (isFinishing || isDestroyed) return@launch
             if (result is UpdateCheckResult.UpdateAvailable) {
                 UpdateDialogHelper.showUpdateDialog(

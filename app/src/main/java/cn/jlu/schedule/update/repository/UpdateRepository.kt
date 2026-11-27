@@ -5,12 +5,15 @@ import android.content.pm.ApplicationInfo
 import cn.jlu.schedule.data.AppPreferences
 import cn.jlu.schedule.update.model.UpdateCheckResult
 import cn.jlu.schedule.update.model.UpdatePayload
+import cn.jlu.schedule.update.security.GitHubReleaseParser
 import cn.jlu.schedule.update.security.UpdateManifestVerifier
 import cn.jlu.schedule.update.security.UpdateSecurityConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import okhttp3.CacheControl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -24,7 +27,9 @@ class UpdateRepository(
         .build(),
     private val trustedKeys: Map<String, String> = UpdateSecurityConfig.TRUSTED_PUBLIC_KEYS,
     private val appVersionCodeOverride: Int? = null,
-    private val isDebugOverride: Boolean? = null
+    private val isDebugOverride: Boolean? = null,
+    private val appVersionNameOverride: String? = null,
+    private val allowedGitHubDownloadPrefix: String = UpdateSecurityConfig.GITHUB_RELEASE_DOWNLOAD_PREFIX
 ) {
 
     private data class FetchOutcome(
@@ -38,14 +43,15 @@ class UpdateRepository(
      */
     suspend fun checkAutoUpdate(
         context: Context,
-        endpoints: List<String> = UpdateSecurityConfig.DEFAULT_ENDPOINTS
+        endpoints: List<String> = UpdateSecurityConfig.DEFAULT_ENDPOINTS,
+        allowInDebug: Boolean = false
     ): UpdateCheckResult {
         val lastCheck = AppPreferences.getLastUpdateCheckTime(context)
         val now = System.currentTimeMillis()
         if (lastCheck <= now && now - lastCheck < 24 * 3600 * 1000L) {
             return UpdateCheckResult.NoUpdate("距离上次检查更新不足24小时")
         }
-        return checkUpdate(context, force = false, endpoints = endpoints)
+        return checkUpdate(context, force = false, endpoints = endpoints, allowInDebug = allowInDebug)
     }
 
     /**
@@ -101,7 +107,13 @@ class UpdateRepository(
         val payload = best.result.getOrThrow()
 
         // 检查版本是否高于当前版本
-        if (payload.versionCode <= currentVersionCode) {
+        val isUpToDate = if (payload.apk.signerSha256.isEmpty()) {
+            val currentVersionName = getAppVersionName(context)
+            GitHubReleaseParser.compareVersionNames(payload.versionName, currentVersionName) <= 0
+        } else {
+            payload.versionCode <= currentVersionCode
+        }
+        if (isUpToDate) {
             return UpdateCheckResult.NoUpdate("当前已是最新版本")
         }
 
@@ -119,13 +131,15 @@ class UpdateRepository(
     private fun fetchSingleManifest(url: String, currentVersionCode: Int, currentSdk: Int): FetchOutcome {
         val start = System.currentTimeMillis()
         return try {
-            val req = Request.Builder()
+            val reqBuilder = Request.Builder()
                 .url(url)
                 .cacheControl(CacheControl.FORCE_NETWORK)
                 .header("User-Agent", "JLU-Schedule-Updater")
-                .build()
+            if ("api.github.com" in url || url.endsWith("/releases/latest", ignoreCase = true)) {
+                reqBuilder.header("Accept", "application/vnd.github+json")
+            }
 
-            val call = client.newCall(req)
+            val call = client.newCall(reqBuilder.build())
             val resp = call.execute()
             resp.use { response ->
                 if (url.startsWith("https://", ignoreCase = true) && !response.request.url.isHttps) {
@@ -137,19 +151,32 @@ class UpdateRepository(
                 val body = response.body?.string()
                     ?: return FetchOutcome(url, Result.failure(Exception("响应体为空")), System.currentTimeMillis() - start)
 
-                val verified = UpdateManifestVerifier.verifyAndParse(
-                    envelopeJson = body,
-                    trustedKeys = trustedKeys,
-                    currentVersionCode = currentVersionCode,
-                    currentSdk = currentSdk,
-                    checkVersionNewer = false
-                )
+                val verified = if (isGitHubReleasePayload(body)) {
+                    GitHubReleaseParser.parse(
+                        releaseJson = body,
+                        allowedDownloadPrefix = allowedGitHubDownloadPrefix,
+                        allowInsecureForTest = !url.startsWith("https://", ignoreCase = true)
+                    )
+                } else {
+                    UpdateManifestVerifier.verifyAndParse(
+                        envelopeJson = body,
+                        trustedKeys = trustedKeys,
+                        currentVersionCode = currentVersionCode,
+                        currentSdk = currentSdk,
+                        checkVersionNewer = false
+                    )
+                }
                 FetchOutcome(url, verified, System.currentTimeMillis() - start)
             }
         } catch (e: Exception) {
             FetchOutcome(url, Result.failure(e), System.currentTimeMillis() - start)
         }
     }
+
+    private fun isGitHubReleasePayload(body: String): Boolean = runCatching {
+        val obj = Json.parseToJsonElement(body).jsonObject
+        "tag_name" in obj && "assets" in obj && "signature" !in obj
+    }.getOrDefault(false)
 
     private fun isDebugApp(context: Context): Boolean {
         return isDebugOverride ?: ((context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0)
@@ -167,6 +194,15 @@ class UpdateRepository(
             }
         } catch (_: Exception) {
             1
+        }
+    }
+
+    private fun getAppVersionName(context: Context): String {
+        if (!appVersionNameOverride.isNullOrBlank()) return appVersionNameOverride
+        return try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.0.0"
+        } catch (_: Exception) {
+            "0.0.0"
         }
     }
 }

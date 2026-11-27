@@ -15,11 +15,16 @@ object UpdateSecurityConfig {
         "main-2026" to "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAs4DRtdfr41/P4Dhiewy2YskgzmtKWYyeWukANtm8oIfQMd8uI3qt2YGnva8oXxwK4abA7ua+/xUx8+kw1+hGNdbOFQXXnZwr7N2KksjzBYKNk8/cXYYv59eSShCezCZyguz/Bw9BeGCeIqvc2t1NqIMMCbGTEuqK0RJLqfAxkJlRMaJwNvPY1PhhWbJodx5V+xQCgw1zdKNeK6o749J3aFjcWf2LfJ8bhbuzV7royKzIUuOkIiM5IA3bGQuDKZxx0q6ehkesgcsf/5xmNwdsBVH0oBW52AaGMGSA9t0wE3kRsul4Bgi2PidWzL9M56xhoxJuGQHUWwhswwR83oYFDQIDAQAB"
     )
 
-    const val DOMESTIC_ENDPOINT = "https://jfyuhong.top/updates/android/stable.json"
-    const val OVERSEAS_ENDPOINT = "https://github.com/JFyuhong/JLU_schedule/releases/latest/download/stable.json"
+    const val GITHUB_OWNER = "DDG667"
+    const val GITHUB_REPO = "JLU_schedule"
+    const val GITHUB_RELEASES_API_ENDPOINT =
+        "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
+    const val GITHUB_RELEASE_DOWNLOAD_PREFIX =
+        "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases/download/"
+    const val OVERSEAS_ENDPOINT =
+        "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases/latest/download/stable.json"
 
     val DEFAULT_ENDPOINTS = listOf(
-        DOMESTIC_ENDPOINT,
-        OVERSEAS_ENDPOINT
+        GITHUB_RELEASES_API_ENDPOINT
     )
 }
